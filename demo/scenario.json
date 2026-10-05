@@ -1,0 +1,18 @@
+{
+  "name": "GTAD Mission-Critical Demo",
+  "node_count": 24,
+  "area_width": 1000,
+  "area_height": 700,
+  "communication_range": 250,
+  "speed": 6,
+  "beta": 0.16,
+  "gamma": 0.09,
+  "steps": 60,
+  "seed": 2025,
+  "initial_infected_count": 2,
+  "attack_strategy": "highest_betweenness",
+  "defense_strategy": "gtad_risk",
+  "defense_budget": 2,
+  "defense_range_multiplier": 1.6,
+  "defense_max_degree": 7
+}

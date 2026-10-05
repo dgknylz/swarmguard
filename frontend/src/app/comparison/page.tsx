@@ -1,0 +1,9 @@
+import { GitCompareArrows, ShieldCheck, TrendingUp } from "lucide-react";
+
+import { PageHeader } from "@/components/layout/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+export default function ComparisonPage() {
+  return <main><PageHeader eyebrow="Karşılaştırmalı analiz" title="Savunma yöntemlerini aynı kanıt düzleminde incele." description="Savunmasız ağ, rastgele yeniden bağlantı, merkeziyet tabanlı yaklaşım ve GTAD sonuçlarını birlikte değerlendir." badge="Planlanan" /><section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{["No Defense", "Random Rewiring", "Centrality Defense", "GTAD"].map((method, index) => <Card className="p-5" key={method}><div className="flex items-center justify-between"><span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-600">0{index + 1}</span>{method === "GTAD" && <Badge tone="info">Özgün</Badge>}</div><p className="mt-8 text-sm font-semibold text-slate-200">{method}</p><p className="mt-2 text-xs text-slate-600">Sonuç verisi bekleniyor</p></Card>)}</section><section className="mt-4 grid gap-4 xl:grid-cols-[1.7fr_1fr]"><Card className="p-6"><CardHeader><div><CardTitle>Enfeksiyon eğrileri</CardTitle><CardDescription className="mt-1">Ortalama ve %95 güven aralığı</CardDescription></div><TrendingUp className="text-slate-600" size={18} /></CardHeader><div className="mt-6 h-72 rounded-xl border border-dashed border-white/[0.08] bg-black/10" /></Card><Card className="p-6"><CardHeader><div><CardTitle>Dayanıklılık özeti</CardTitle><CardDescription className="mt-1">Çok metrikli değerlendirme</CardDescription></div><ShieldCheck className="text-slate-600" size={18} /></CardHeader><div className="mt-6 flex h-72 items-center justify-center"><GitCompareArrows className="text-slate-800" size={46} /></div></Card></section></main>;
+}
