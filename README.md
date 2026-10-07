@@ -6,9 +6,9 @@ bir araştırma ve görselleştirme platformudur.
 
 ## Şu anki durum: 46 / 47 adım tamamlandı
 
-Son ürün kontrolü tamamlandı. Yerel uygulama ve yayın paketi hazırdır; yalnızca
-GitHub'a gönderim ile genel `streamlit.app` adresinin doğrulanması kullanıcı
-hesabında yapılmayı beklemektedir.
+Son ürün kontrolü tamamlandı. Kod GitHub'daki `dgknylz/swarmguard` deposuna
+gönderildi ve yayın paketi hazırdır; yalnızca genel `streamlit.app` adresinin
+oluşturulup doğrulanması beklemektedir.
 
 Bilimsel simülasyon çekirdeği şunları içerir:
 
@@ -208,9 +208,9 @@ korunur ve yeniden deneme yolu sunulur. Deney, rapor ve çalışma alanı gibi h
 verisi olmayan bölümler kullanıcıyı doğru başlangıç adımına yönlendirir.
 
 Streamlit Cloud ön kontrolü giriş noktası, bağımlılıklar, tema/sunucu ayarları,
-Python sürümü, secrets durumu ve Git teslim sözleşmesini otomatik denetler. Kod
-ve yerel çalışma zamanı hazırdır; genel URL testi için projenin GitHub'a commit
-edilip `origin` remote'una gönderilmesi gerekir. Güncel durum
+Python sürümü, secrets durumu ve Git teslim sözleşmesini otomatik denetler. Kod,
+yerel çalışma zamanı ve GitHub teslimi hazırdır; geriye Community Cloud'da genel
+URL'nin oluşturulup test edilmesi kalmıştır. Güncel durum
 [docs/CLOUD_PREFLIGHT_REPORT.md](docs/CLOUD_PREFLIGHT_REPORT.md) içindedir.
 
 Son ürün denetiminin geçen kontrolleri, çevre notları ve dürüst kapsam eksikleri

@@ -6,8 +6,8 @@ Tarih: 5 Ekim 2026
 
 Adım 47 tamamlandı. Uygulamanın simülasyon, deney, raporlama, veri taşıma ve
 çok sayfalı Streamlit akışları yerel ortamda çalışıyor. Otomatik doğrulama
-kapıları geçiyor. Adım 46'nın kod ve yapılandırma kısmı hazır; GitHub remote,
-push ve genel `streamlit.app` URL doğrulaması hesap erişimi beklediği için açık.
+kapıları geçiyor. Adım 46'nın kod, yapılandırma ve GitHub teslimi hazır; genel
+`streamlit.app` URL doğrulaması hesap erişimi beklediği için açık.
 
 ## Geçen kontroller
 
@@ -38,8 +38,8 @@ sanal ortamı kullanılmalıdır.
 
 ### Yayın engeli
 
-- Git deposunda `origin` yok ve dosyalar henüz GitHub'a gönderilmedi.
-- Bu nedenle Community Cloud üzerinde gerçek soğuk kurulum, genel URL ve uyku
+- Kod `https://github.com/dgknylz/swarmguard` deposunun `main` dalındadır.
+- Community Cloud üzerinde gerçek soğuk kurulum, genel URL ve uyku
   sonrası yeniden başlatma testi henüz yapılamadı.
 
 ### Ürün sınırları

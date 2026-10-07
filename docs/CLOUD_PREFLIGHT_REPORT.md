@@ -2,11 +2,11 @@
 
 ## Durum
 
-**Kod hazır · Git teslimi bekleniyor**
+**Kod ve Git teslimi hazır · Cloud yayını bekleniyor**
 
-Yerel uygulama ve Cloud dosya sözleşmesi doğrulandı. Gerçek `streamlit.app`
-yayınına geçebilmek için kaynakların bir GitHub deposuna commit edilmesi ve
-`origin` remote'una gönderilmesi gerekiyor.
+Yerel uygulama, Cloud dosya sözleşmesi ve GitHub teslimi doğrulandı. `main` dalı
+`https://github.com/dgknylz/swarmguard` deposuna gönderildi. Gerçek
+`streamlit.app` yayını ve genel URL kontrolü sıradaki son işlemdir.
 
 ## Geçen kontroller
 
@@ -19,10 +19,10 @@ yayınına geçebilmek için kaynakların bir GitHub deposuna commit edilmesi ve
 - 91 backend ve 20 frontend testi geçiyor.
 - Next.js production build başarıyla tamamlanıyor.
 
-## Yayını engelleyen teslim koşulları
+## Açık kalan yayın koşulu
 
-1. GitHub `origin` remote'u yapılandırılmamış.
-2. Cloud için gerekli dosyalar henüz Git tarafından izlenmiyor ve commit edilmemiş.
+- Community Cloud'da `main` dalı ve `streamlit_app.py` giriş noktası seçilerek
+  uygulama oluşturulmalı; oluşan genel URL dışarıdan doğrulanmalıdır.
 
 ## Otomatik kontrol komutu
 
@@ -30,5 +30,5 @@ yayınına geçebilmek için kaynakların bir GitHub deposuna commit edilmesi ve
 backend\.venv\Scripts\python.exe -m swarmguard.dashboard.deployment .
 ```
 
-Remote ve commit hazır olduğunda çıktı `READY` olmalıdır. Ardından Community
-Cloud'da repository, branch ve `streamlit_app.py` seçilerek yayın başlatılabilir.
+Güncel çıktı `READY` durumundadır. Community Cloud'da repository, branch ve
+`streamlit_app.py` seçilerek yayın başlatılabilir.
