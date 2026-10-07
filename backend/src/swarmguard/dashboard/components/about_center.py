@@ -36,7 +36,7 @@ def get_project_profile() -> ProjectProfile:
     return ProjectProfile(
         name="SwarmGuard",
         version="1.1.0",
-        completed_steps=46,
+        completed_steps=47,
         total_steps=47,
         architecture=(
             ArchitectureLayer(

@@ -1,13 +1,13 @@
 # SwarmGuard son ürün denetimi
 
-Tarih: 5 Ekim 2026
+Tarih: 7 Ekim 2026
 
 ## Sonuç
 
 Adım 47 tamamlandı. Uygulamanın simülasyon, deney, raporlama, veri taşıma ve
 çok sayfalı Streamlit akışları yerel ortamda çalışıyor. Otomatik doğrulama
-kapıları geçiyor. Adım 46'nın kod, yapılandırma ve GitHub teslimi hazır; genel
-`streamlit.app` URL doğrulaması hesap erişimi beklediği için açık.
+kapıları geçiyor. Kod, yapılandırma, GitHub teslimi ve genel Streamlit Cloud
+yayını doğrulandı. Yol haritasındaki 47 adımın tamamı tamamlandı.
 
 ## Geçen kontroller
 
@@ -36,11 +36,12 @@ sanal ortamı kullanılmalıdır.
 
 ## Açık kalanlar
 
-### Yayın engeli
+### Yayın durumu
 
 - Kod `https://github.com/dgknylz/swarmguard` deposunun `main` dalındadır.
-- Community Cloud üzerinde gerçek soğuk kurulum, genel URL ve uyku
-  sonrası yeniden başlatma testi henüz yapılamadı.
+- Genel uygulama `https://7dtgk27v5yinc3r2ouqkck.streamlit.app` adresindedir.
+- Community Cloud soğuk kurulumu Python 3.13 ile tamamlandı ve bütün sayfa
+  rotaları dışarıdan HTTP 200 döndürdü.
 
 ### Ürün sınırları
 
@@ -69,9 +70,9 @@ sanal ortamı kullanılmalıdır.
 - Savunmalar araştırma karşılaştırması içindir; operasyonel otonom karar sistemi
   ya da güvenlik sertifikalı uçuş yazılımı değildir.
 
-## Yayın tamamlanma ölçütü
+## Yayın tamamlanma kanıtı
 
-Adım 46 ancak aşağıdaki üç kanıt birlikte görüldüğünde tamamlanmış sayılmalıdır:
+Adım 46 aşağıdaki üç kanıtla tamamlanmıştır:
 
 1. GitHub `origin` remote'u ve push edilmiş commit,
 2. Community Cloud'da başarılı build logu,

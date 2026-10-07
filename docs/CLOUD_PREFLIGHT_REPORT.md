@@ -2,11 +2,11 @@
 
 ## Durum
 
-**Kod ve Git teslimi hazır · Cloud yayını bekleniyor**
+**Yayın başarılı · Genel URL doğrulandı**
 
 Yerel uygulama, Cloud dosya sözleşmesi ve GitHub teslimi doğrulandı. `main` dalı
-`https://github.com/dgknylz/swarmguard` deposuna gönderildi. Gerçek
-`streamlit.app` yayını ve genel URL kontrolü sıradaki son işlemdir.
+`https://github.com/dgknylz/swarmguard` deposuna gönderildi. Uygulama Python
+3.13 ile `https://7dtgk27v5yinc3r2ouqkck.streamlit.app` adresinde çalışıyor.
 
 ## Geçen kontroller
 
@@ -19,10 +19,13 @@ Yerel uygulama, Cloud dosya sözleşmesi ve GitHub teslimi doğrulandı. `main` 
 - 91 backend ve 20 frontend testi geçiyor.
 - Next.js production build başarıyla tamamlanıyor.
 
-## Açık kalan yayın koşulu
+## Cloud doğrulaması
 
-- Community Cloud'da `main` dalı ve `streamlit_app.py` giriş noktası seçilerek
-  uygulama oluşturulmalı; oluşan genel URL dışarıdan doğrulanmalıdır.
+- Ana sayfa, Simülasyon, Çalışma Alanı, Deneyler, Metodoloji, Hakkında ve sağlık
+  rotaları dışarıdan HTTP 200 döndürüyor.
+- İlk kurulumda seçilen Python 3.14, `pyarrow 21` paketini kaynaktan derleyemedi.
+  Cloud çalışma zamanı proje sözleşmesiyle uyumlu Python 3.13'e alınarak sorun
+  giderildi.
 
 ## Otomatik kontrol komutu
 
@@ -30,5 +33,4 @@ Yerel uygulama, Cloud dosya sözleşmesi ve GitHub teslimi doğrulandı. `main` 
 backend\.venv\Scripts\python.exe -m swarmguard.dashboard.deployment .
 ```
 
-Güncel çıktı `READY` durumundadır. Community Cloud'da repository, branch ve
-`streamlit_app.py` seçilerek yayın başlatılabilir.
+Güncel çıktı `READY` durumundadır ve genel yayın doğrulanmıştır.

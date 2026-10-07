@@ -119,5 +119,5 @@ def test_user_journey_reads_methodology_and_product_scope() -> None:
     assert len(methodology.latex) == 6
     assert not about.exception
     assert contains_markdown(about, "SWARMGUARD · v1.1.0")
-    assert contains_markdown(about, "46 / 47 adım")
+    assert contains_markdown(about, "47 / 47 adım")
     assert any(expander.label == "Tasarım sistemi vitrini" for expander in about.expander)

@@ -31,7 +31,7 @@
 - [x] Beş uçtan uca Streamlit kullanıcı yolculuğu hatasız tamamlanıyor
 - [x] Sayfa hata sınırı teknik ayrıntıları gizliyor ve güvenli yeniden deneme sunuyor
 - [x] Ortak boş durumlar kullanıcıyı doğru başlangıç ekranına yönlendiriyor
-- [x] Streamlit Cloud kod/yapılandırma ön kontrolü başarılı; Git teslimi bekliyor
+- [x] Streamlit Cloud Python 3.13 kurulumu, genel URL ve bütün sayfa rotaları doğrulandı
 - [x] Production npm bağımlılık denetiminde bilinen açık yok
 - [x] Hassas dosya, anahtar ve yanlışlıkla teslim edilecek üretim çıktısı taraması temiz
 - [x] Scientific modda metrikler, olaylar ve denetim metadata'sı korunuyor

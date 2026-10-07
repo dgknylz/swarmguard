@@ -4,11 +4,11 @@ SwarmGuard, dinamik İHA haberleşme ağlarında siber saldırı yayılımını
 incelemek ve adaptif topoloji savunmalarını karşılaştırmak için geliştirilen
 bir araştırma ve görselleştirme platformudur.
 
-## Şu anki durum: 46 / 47 adım tamamlandı
+## Şu anki durum: 47 / 47 adım tamamlandı
 
 Son ürün kontrolü tamamlandı. Kod GitHub'daki `dgknylz/swarmguard` deposuna
-gönderildi ve yayın paketi hazırdır; yalnızca genel `streamlit.app` adresinin
-oluşturulup doğrulanması beklemektedir.
+gönderildi ve uygulama Streamlit Community Cloud üzerinde canlıdır:
+https://7dtgk27v5yinc3r2ouqkck.streamlit.app
 
 Bilimsel simülasyon çekirdeği şunları içerir:
 
@@ -209,8 +209,8 @@ verisi olmayan bölümler kullanıcıyı doğru başlangıç adımına yönlendi
 
 Streamlit Cloud ön kontrolü giriş noktası, bağımlılıklar, tema/sunucu ayarları,
 Python sürümü, secrets durumu ve Git teslim sözleşmesini otomatik denetler. Kod,
-yerel çalışma zamanı ve GitHub teslimi hazırdır; geriye Community Cloud'da genel
-URL'nin oluşturulup test edilmesi kalmıştır. Güncel durum
+yerel çalışma zamanı, GitHub teslimi ve genel Streamlit Cloud URL'si doğrulandı.
+Güncel durum
 [docs/CLOUD_PREFLIGHT_REPORT.md](docs/CLOUD_PREFLIGHT_REPORT.md) içindedir.
 
 Son ürün denetiminin geçen kontrolleri, çevre notları ve dürüst kapsam eksikleri

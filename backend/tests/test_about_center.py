@@ -20,7 +20,7 @@ def test_project_profile_has_complete_unique_architecture_and_capabilities() -> 
 
     assert profile.name == "SwarmGuard"
     assert profile.version == "1.1.0"
-    assert profile.completed_steps == 46
+    assert profile.completed_steps == 47
     assert profile.total_steps == 47
     assert len(profile.architecture) == 4
     assert len({layer.key for layer in profile.architecture}) == len(profile.architecture)
