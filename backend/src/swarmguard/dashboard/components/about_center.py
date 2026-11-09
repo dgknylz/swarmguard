@@ -67,7 +67,7 @@ def get_project_profile() -> ProjectProfile:
         capabilities=(
             "Dinamik İHA haberleşme ağı",
             "Senkron SIS saldırı yayılımı",
-            "Dört savunma yaklaşımı",
+            "Spektral Kalkan ve beş karşılaştırma yöntemi",
             "Canlı replay ve düğüm inceleme",
             "Monte Carlo ve GTAD ablation",
             "Karşılaştırma ve araştırma raporları",

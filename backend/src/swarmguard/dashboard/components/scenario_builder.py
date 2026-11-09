@@ -126,7 +126,7 @@ def render_scenario_builder(st, base: SimulationConfig, *, key_prefix: str) -> B
         node_count = node_col.number_input(
             "İHA sayısı",
             min_value=2,
-            max_value=500,
+            max_value=300,
             value=base.node_count,
             key=f"{key_prefix}-nodes",
         )
@@ -166,7 +166,7 @@ def render_scenario_builder(st, base: SimulationConfig, *, key_prefix: str) -> B
         steps = steps_col.number_input(
             "Zaman adımı",
             min_value=1,
-            max_value=10_000,
+            max_value=2_000,
             value=base.steps,
             key=f"{key_prefix}-steps",
         )

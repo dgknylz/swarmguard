@@ -25,7 +25,12 @@ def test_report_document_derives_leaders_and_reproducibility_identity() -> None:
     assert document.run_count == 4
     assert document.seed_count == 2
     assert document.baseline == "none"
-    assert document.best_security_method in {"none", "gtad_risk"}
+    assert set(document.best_security_method.split(" = ")) <= {
+        "none",
+        "gtad_risk",
+        "Savunmasız",
+        "GTAD Risk",
+    }
     assert document.fingerprint.startswith("sha256:")
 
 

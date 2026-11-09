@@ -61,6 +61,12 @@ def build_comparison_rows(result: dict[str, object], metric: str) -> tuple[Compa
     )
 
 
+def leading_methods(result: dict[str, object], metric: str) -> tuple[ComparisonRow, ...]:
+    """Every method tied with the best mean; paired runs often tie exactly."""
+    rows = build_comparison_rows(result, metric)
+    return tuple(row for row in rows if abs(row.mean - rows[0].mean) <= 1e-12)
+
+
 def build_normalized_scorecard(result: dict[str, object]) -> list[dict[str, object]]:
     summaries = result["summaries"]
     ranges: dict[str, tuple[float, float]] = {}
@@ -140,9 +146,14 @@ def render_comparison_panel(st, history: list[dict[str, object]]) -> None:
     scorecard = build_normalized_scorecard(result)
     baseline = baseline_method(result)
     best = rows[0]
+    leaders = leading_methods(result, metric)
 
     metric_columns = st.columns(4)
-    metric_columns[0].metric("En iyi yöntem", best.label)
+    metric_columns[0].metric(
+        "En iyi yöntem",
+        best.label if len(leaders) == 1 else f"{len(leaders)} yöntem berabere",
+        help=" = ".join(row.label for row in leaders),
+    )
     metric_columns[1].metric("En iyi ortalama", f"{best.mean:.4f}")
     metric_columns[2].metric("Karşılaştırılan yöntem", len(rows))
     metric_columns[3].metric("Eşleştirilmiş seed", len(result["seeds"]))
@@ -212,7 +223,7 @@ def render_comparison_panel(st, history: list[dict[str, object]]) -> None:
     st.plotly_chart(heatmap, width="stretch", key=f"comparison-heatmap-{selected_id}")
     st.caption(
         "Her sütun kendi yöntem aralığında 0–1 ölçeğine normalize edilir; yüksek değer daha iyi sonucu "
-        "gösterir. Genel skor, yedi metriğin eşit ağırlıklı ortalamasıdır."
+        f"gösterir. Genel skor, {len(RESULT_METRICS)} metriğin eşit ağırlıklı ortalamasıdır."
     )
 
     seed_column, delta_column = st.columns([1.4, 1], vertical_alignment="top")

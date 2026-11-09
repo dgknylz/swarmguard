@@ -26,6 +26,19 @@ METHOD_LABELS = {
     "without_distance": "Mesafe yok",
 }
 
+METHOD_COLORS = {
+    "none": "#64748b",
+    "random_rewiring": "#60a5fa",
+    "centrality_quarantine": "#fbbf24",
+    "gtad_risk": "#a78bfa",
+    "spectral_shield": "#5eead4",
+    "random_addition": "#38bdf8",
+    "full": "#5eead4",
+    "without_connectivity": "#fb7185",
+    "without_safety": "#fbbf24",
+    "without_distance": "#a78bfa",
+}
+
 METRIC_LABELS = {
     "final_infected_ratio": "Son enfeksiyon oranı",
     "peak_infected_ratio": "Tepe enfeksiyon oranı",
@@ -92,12 +105,13 @@ def summary_rows(result: dict[str, object], metric: str) -> list[dict[str, objec
         for comparison in result.get("paired_comparisons", [])
     }
 
-    def significance(method: str) -> tuple[str, float | None]:
+    def significance(method: str) -> tuple[str, str]:
         statistics = tests.get(method)
         if not statistics or "wins" not in statistics:
-            return "referans" if method not in tests else "—", None
+            return ("referans" if method not in tests else "—"), "—"
         pairs = statistics["wins"] + statistics["losses"] + statistics["ties"]
-        return f"{statistics['wins']}/{pairs}", statistics.get("p_value_holm")
+        holm = statistics.get("p_value_holm")
+        return f"{statistics['wins']}/{pairs}", "—" if holm is None else f"{holm:.2e}"
 
     rows = []
     for summary in result["summaries"]:
@@ -182,7 +196,8 @@ def _render_result(st, result: dict[str, object]) -> None:
             "arrayminus": [row["mean"] - row["ci95_low"] for row in rows],
             "color": "#9aeee4",
         },
-        marker_color="#57e7d6",
+        marker_color=[METHOD_COLORS.get(row["method"], "#57e7d6") for row in rows],
+        marker_line={"color": "rgba(255,255,255,0.18)", "width": 1},
         hovertemplate="%{x}<br>Ortalama: %{y:.4f}<extra></extra>",
     )
     figure.update_layout(
@@ -223,7 +238,6 @@ def _render_result(st, result: dict[str, object]) -> None:
         ],
         width="stretch",
         hide_index=True,
-        column_config={"Holm p": st.column_config.NumberColumn(format="%.2e")},
     )
     st.caption(
         "Holm p: baseline'a göre eşleştirilmiş t testinin Holm–Bonferroni düzeltmeli değeri; "

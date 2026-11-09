@@ -217,7 +217,7 @@ aynı kurumsal ürün görünümünde sunulur.
 
 Çalışma Alanı sayfası aktif senaryoyu, bütün simülasyon karelerini, olayları,
 deney geçmişini ve seçili analiz bağlamını taşınabilir bir UTF-8 JSON paketine
-dönüştürür. Paketler 1.0 şema sürümü ve SHA-256 bütünlük imzasıyla doğrulanır;
+dönüştürür. Paketler 1.0 şema sürümü ve SHA-256 bütünlük özetiyle (checksum) doğrulanır;
 başka bir tarayıcı veya oturumda yüklenerek replay ve deney geçmişiyle birlikte
 kaldığı yerden devam edilebilir. Geçersiz, değiştirilmiş veya 25 MB sınırını aşan
 dosyalar uygulanmadan reddedilir.

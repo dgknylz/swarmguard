@@ -592,6 +592,45 @@ REFRESH_CSS = """
     .sg-theorem-head p { margin: 0; color: #8fa6aa; }
     .sg-card-title { color: #fbbf24; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; }
     @media (max-width: 900px) { .sg-theory-hero { grid-template-columns: 1fr; } }
+
+    /* Motion: content rises in once when it mounts; reruns keep mounted elements still. */
+    @keyframes sg-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes sg-sheen { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+    @keyframes sg-breathe { 50% { box-shadow: 0 0 28px rgba(251, 191, 36, 0.2); border-color: rgba(251, 191, 36, 0.5); } }
+    @keyframes sg-ping { 0% { box-shadow: 0 0 0 0 rgba(94, 234, 212, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(94, 234, 212, 0); } }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"],
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+        animation: sg-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(2) { animation-delay: 0.05s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(3) { animation-delay: 0.1s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(4) { animation-delay: 0.15s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(5) { animation-delay: 0.2s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(n+6) { animation-delay: 0.25s; }
+    .sg-landing h1 em {
+        background-image: linear-gradient(90deg, #5eead4, #38bdf8, #a78bfa, #5eead4);
+        background-size: 250% 100%; animation: sg-sheen 7s ease-in-out infinite alternate;
+    }
+    .sg-equation { animation: sg-breathe 4.5s ease-in-out infinite; }
+    .sg-kicker { animation: sg-ping 2.4s ease-out infinite; }
+    [data-testid="stMetric"] { transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-3px); border-color: rgba(94, 234, 212, 0.4);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(94, 234, 212, 0.08);
+    }
+    [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+        border: 0 !important; color: #032b26 !important; font-weight: 700 !important;
+        background: linear-gradient(135deg, #5eead4, #38bdf8) !important;
+        box-shadow: 0 10px 26px rgba(56, 189, 248, 0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    [data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primaryFormSubmit"]:hover {
+        transform: translateY(-1px); box-shadow: 0 14px 32px rgba(56, 189, 248, 0.38);
+    }
+    .sg-button { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+    .sg-button:hover { transform: translateY(-2px); }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
 </style>
 """
 

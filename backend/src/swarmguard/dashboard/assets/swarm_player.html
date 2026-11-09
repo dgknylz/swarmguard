@@ -171,7 +171,21 @@
   const HAS_FIEDLER = FR.every((f) => Array.isArray(f.v));
 
   // Per-frame caches ---------------------------------------------------------------
-  const cache = { inf: [], det: [], quar: [], keys: [], adj: [], perron: new Map(), spec: [] };
+  const cache = { inf: [], det: [], quar: [], keys: [], adj: [], perron: new Map(), spec: [], tx: [] };
+  // Source → target pairs of the infections that happen when frame k−1 turns into frame k:
+  // the virus travels along an edge of graph k from a UAV that was infected at k−1.
+  function transmissions(k) {
+    if (cache.tx[k]) return cache.tx[k];
+    const pairs = [];
+    if (k > 0) {
+      const before = infected(k - 1), lists = adjacency(k);
+      for (const [kind, node] of FR[k].ev) {
+        if (kind !== "infected") continue;
+        for (const source of lists[node]) if (before.has(source)) pairs.push(source, node);
+      }
+    }
+    return (cache.tx[k] = pairs);
+  }
   const setOf = (store, k, list) => store[k] || (store[k] = new Set(list));
   const infected = (k) => setOf(cache.inf, k, FR[k].i);
   const detected = (k) => setOf(cache.det, k, FR[k].d);
@@ -287,11 +301,11 @@
       ctx.fillText(`${step} m`, bx + bar / 2 - 12, by - 6);
     }
   }
-  function strokePairs(list, style, width, alpha, dash) {
+  function strokePairs(list, style, width, alpha, dash, offset = 0) {
     if (!list.length || alpha <= 0.002) return;
     ctx.save();
     ctx.globalAlpha = alpha; ctx.strokeStyle = style; ctx.lineWidth = width;
-    if (dash) ctx.setLineDash(dash);
+    if (dash) { ctx.setLineDash(dash); ctx.lineDashOffset = offset; }
     ctx.beginPath();
     for (let j = 0; j < list.length; j += 2) {
       const a = list[j], b = list[j + 1];
@@ -300,8 +314,8 @@
     ctx.stroke();
     ctx.restore();
   }
-  function drawEdges(k, k1, alpha) {
-    if (state.layer !== "health") { drawLayerEdges(k); drawDefenseEdges(k); return; }
+  function drawEdges(k, k1, alpha, time) {
+    if (state.layer !== "health") { drawLayerEdges(k); drawDefenseEdges(k, time); return; }
     const inf = infected(k), now = FR[k].e, next = edgeKeys(k1), current = edgeKeys(k);
     const keep = [], fadeOut = [], risky = [], riskyOut = [];
     for (let j = 0; j < now.length; j += 2) {
@@ -320,7 +334,40 @@
     strokePairs(fadeIn, rgba(COLOR.edge, 1), 1, base * alpha);
     strokePairs(risky, rgba(COLOR.red, 1), 1.4, 0.55);
     strokePairs(riskyOut, rgba(COLOR.red, 1), 1.4, 0.55 * (1 - alpha));
-    drawDefenseEdges(k);
+    drawDefenseEdges(k, time);
+    if (k1 !== k) drawTransmissions(k1, alpha);
+  }
+  function drawTransmissions(k1, alpha) {
+    const pairs = transmissions(k1);
+    if (!pairs.length) return;
+    const t = ease(Math.min(1, alpha * 1.15));
+    ctx.save();
+    for (let j = 0; j < pairs.length; j += 2) {
+      const a = pairs[j], b = pairs[j + 1];
+      const x0 = pts[2 * a], y0 = pts[2 * a + 1], x1 = pts[2 * b], y1 = pts[2 * b + 1];
+      const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t, tail = Math.max(0, t - 0.22);
+      const grad = ctx.createLinearGradient(x0 + (x1 - x0) * tail, y0 + (y1 - y0) * tail, x, y);
+      grad.addColorStop(0, "rgba(251, 113, 133, 0)"); grad.addColorStop(1, "rgba(251, 113, 133, 0.95)");
+      ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x0 + (x1 - x0) * tail, y0 + (y1 - y0) * tail); ctx.lineTo(x, y); ctx.stroke();
+      ctx.shadowBlur = 16; ctx.shadowColor = "rgba(251, 113, 133, 1)"; ctx.fillStyle = "#ffe4e6";
+      ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 2 * Math.PI); ctx.fill(); ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+  function drawTrails(k, alpha) {
+    if (N > 200 || COMPACT) return;
+    const back = Math.max(0, state.tau - 0.7), j = Math.min(LAST, Math.floor(back)), j1 = Math.min(LAST, j + 1), a = back - j;
+    const p = FR[j].p, q = FR[j1].p;
+    ctx.save(); ctx.lineCap = "round"; ctx.lineWidth = view.r * 0.9;
+    for (let i = 0; i < N; i++) {
+      const x = sx(p[2 * i] + (q[2 * i] - p[2 * i]) * a), y = sy(p[2 * i + 1] + (q[2 * i + 1] - p[2 * i + 1]) * a);
+      const grad = ctx.createLinearGradient(x, y, pts[2 * i], pts[2 * i + 1]);
+      const tone = infected(k).has(i) ? "251, 113, 133" : "94, 234, 212";
+      grad.addColorStop(0, `rgba(${tone}, 0)`); grad.addColorStop(1, `rgba(${tone}, 0.28)`);
+      ctx.strokeStyle = grad; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(pts[2 * i], pts[2 * i + 1]); ctx.stroke();
+    }
+    ctx.restore();
   }
   function drawLayerEdges(k) {
     const s = spectral(k), e = FR[k].e;
@@ -346,10 +393,11 @@
     strokePairs(cut, rgba(COLOR.amber, 1), 2.4, 0.95, [6, 4]);
     ctx.restore();
   }
-  function drawDefenseEdges(k) {
+  function drawDefenseEdges(k, time = 0) {
     strokePairs(FR[k].x, rgba(COLOR.red, 1), 1.2, 0.5, [3, 5]);
     ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = rgba(COLOR.cyan, 0.9);
-    strokePairs(FR[k].a, rgba(COLOR.cyan, 1), 1.8, 0.95, [7, 4]);
+    // Marching dashes make the relay links read as live connections.
+    strokePairs(FR[k].a, rgba(COLOR.cyan, 1), 1.8, 0.95, [7, 4], -((time * 26) % 11));
     ctx.restore();
     if (state.selected >= 0) {
       const lists = adjacency(k), s = state.selected, pairs = [];
@@ -357,9 +405,9 @@
       strokePairs(pairs, rgba(COLOR.white, 1), 1.6, 0.7);
     }
   }
-  function hexagon(x, y, r) {
+  function hexagon(x, y, r, turn = 0) {
     ctx.beginPath();
-    for (let i = 0; i < 6; i++) { const t = Math.PI / 6 + (i * Math.PI) / 3; ctx[i ? "lineTo" : "moveTo"](x + r * Math.cos(t), y + r * Math.sin(t)); }
+    for (let i = 0; i < 6; i++) { const t = turn + Math.PI / 6 + (i * Math.PI) / 3; ctx[i ? "lineTo" : "moveTo"](x + r * Math.cos(t), y + r * Math.sin(t)); }
     ctx.closePath();
   }
   function drawNodes(k, k1, alpha, time) {
@@ -407,8 +455,13 @@
         ctx.beginPath(); ctx.arc(x, y, R * grow + 3.5, 0, 2 * Math.PI); ctx.stroke(); ctx.restore();
       }
       if (quar.has(i)) {
-        ctx.save(); ctx.strokeStyle = rgba(COLOR.amber, 0.95); ctx.lineWidth = 1.8; ctx.setLineDash([4, 3]);
-        hexagon(x, y, R * grow + 6); ctx.stroke(); ctx.restore();
+        // A fresh quarantine snaps in from a larger shield; held ones slowly rotate.
+        const fresh = k > 0 && !quarantined(k - 1).has(i), grow2 = Math.min(1, alpha * 1.8);
+        const pop = fresh ? 1 + 0.9 * (1 - ease(grow2)) : 1;
+        ctx.save(); ctx.globalAlpha = fresh ? 0.35 + 0.65 * grow2 : 1;
+        ctx.strokeStyle = rgba(COLOR.amber, 0.95); ctx.lineWidth = 1.8; ctx.setLineDash([4, 3]);
+        ctx.shadowBlur = 8; ctx.shadowColor = rgba(COLOR.amber, 0.7);
+        hexagon(x, y, (R * grow + 6) * pop, time * 0.5); ctx.stroke(); ctx.restore();
       }
       if (i === state.selected) {
         ctx.strokeStyle = rgba(COLOR.white, 0.95); ctx.lineWidth = 2;
@@ -452,7 +505,8 @@
       ctx.clearRect(0, 0, view.w, view.h);
       drawArea();
       drawRanges(k);
-      drawEdges(k, k1, alpha);
+      drawTrails(k, alpha);
+      drawEdges(k, k1, alpha, time);
       drawNodes(k, k1, alpha, time);
     }
     if (k !== state.shown) showFrame(k);
@@ -708,6 +762,7 @@
       try { await loadThree(); init3d(); }
       catch (error) { notify("3B görünüm yüklenemedi; 2B görünümde devam ediliyor."); return; }
     }
+    if (mode === "3d") v3.intro = performance.now();
     state.mode = mode;
     canvas.style.display = mode === "3d" ? "none" : "block";
     if (v3.ready) v3.renderer.domElement.style.display = mode === "3d" ? "block" : "none";
@@ -769,6 +824,18 @@
       const ring = new T.Mesh(new T.TorusGeometry(0.17, 0.012, 6, 36), new T.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.9 }));
       ring.rotation.x = Math.PI / 2; ring.visible = false; scene.add(ring); return ring;
     });
+    const glowMap = glowTexture(T);
+    const pointCloud = (count, size) => {
+      const geometry = new T.BufferGeometry();
+      geometry.setAttribute("position", new T.BufferAttribute(new Float32Array(count * 3), 3));
+      geometry.setAttribute("color", new T.BufferAttribute(new Float32Array(count * 3), 3));
+      geometry.setDrawRange(0, 0);
+      return new T.Points(geometry, new T.PointsMaterial({ size, map: glowMap, vertexColors: true, transparent: true,
+        depthWrite: false, blending: T.AdditiveBlending }));
+    };
+    const packets = pointCloud(256, 0.45);   // infections travelling along edges
+    const halos = pointCloud(N, 1.5);        // red light on the ground under infected UAVs
+    scene.add(packets, halos);
     const orbit = { theta: 0.6, phi: 0.98, radius: Math.max(W, H) * 1.08, drag: null, idle: 0 };
     const el = renderer.domElement;
     el.addEventListener("pointerdown", (e) => { orbit.drag = { x: e.clientX, y: e.clientY, moved: 0 }; el.setPointerCapture(e.pointerId); });
@@ -784,8 +851,9 @@
       orbit.radius = Math.min(Math.max(W, H) * 3, Math.max(1.5, orbit.radius * (1 + Math.sign(e.deltaY) * 0.08)));
       orbit.idle = performance.now();
     }, { passive: false });
-    Object.assign(v3, { T, renderer, scene, camera, nodes, glow, edges, stems, rings, orbit, color,
-      matrix: new T.Matrix4(), target: new T.Vector3(0, 0.45, 0), probe: new T.Vector3(), world: new Float32Array(N * 3), ready: true });
+    Object.assign(v3, { T, renderer, scene, camera, nodes, glow, edges, stems, rings, orbit, color, packets, halos,
+      matrix: new T.Matrix4(), target: new T.Vector3(0, 0.45, 0), probe: new T.Vector3(), world: new Float32Array(N * 3),
+      heat: new Float32Array(N), intro: performance.now(), ready: true });
     layout3d();
   }
   function layout3d() {
@@ -818,6 +886,7 @@
       const y = altitude(i, time);
       world[3 * i] = x; world[3 * i + 1] = y; world[3 * i + 2] = z;
       const a = infA.has(i), b = infB.has(i), t = a === b ? (a ? 1 : 0) : b ? ease(alpha) : 1 - ease(alpha);
+      v3.heat[i] = t;
       const rgb = health ? mix(COLOR.mint, COLOR.red, t) : layerColor(i, k);
       const scale = 1 + (health ? 0.4 * t * (0.5 + 0.5 * Math.sin(time * 5 + i)) : 0) + (i === state.selected ? 0.6 : 0);
       matrix.makeScale(scale, scale, scale); matrix.setPosition(x, y, z); nodes.setMatrixAt(i, matrix);
@@ -833,6 +902,29 @@
     glow.geometry.attributes.position.needsUpdate = true; glow.geometry.attributes.color.needsUpdate = true;
     stems.geometry.setDrawRange(0, 2 * N);
     stems.geometry.attributes.position.needsUpdate = true; stems.geometry.attributes.color.needsUpdate = true;
+
+    const hp = v3.halos.geometry.attributes.position.array, hc = v3.halos.geometry.attributes.color.array;
+    for (let i = 0; i < N; i++) {
+      const heat = 0.3 * v3.heat[i] * (0.8 + 0.2 * Math.sin(time * 3 + i));
+      hp.set([world[3 * i], 0.01, world[3 * i + 2]], 3 * i);
+      hc.set([heat, heat * 0.22, heat * 0.3], 3 * i);
+    }
+    v3.halos.geometry.setDrawRange(0, N);
+    v3.halos.geometry.attributes.position.needsUpdate = true; v3.halos.geometry.attributes.color.needsUpdate = true;
+
+    const kp = v3.packets.geometry.attributes.position.array, kc = v3.packets.geometry.attributes.color.array;
+    let sent = 0;
+    if (k1 !== k && health) {
+      const pairs = transmissions(k1), travel = ease(Math.min(1, alpha * 1.15));
+      for (let j = 0; j < pairs.length && sent < 256; j += 2, sent++) {
+        const a = 3 * pairs[j], b = 3 * pairs[j + 1];
+        kp.set([world[a] + (world[b] - world[a]) * travel, world[a + 1] + (world[b + 1] - world[a + 1]) * travel,
+          world[a + 2] + (world[b + 2] - world[a + 2]) * travel], 3 * sent);
+        kc.set([1, 0.6, 0.66], 3 * sent);
+      }
+    }
+    v3.packets.geometry.setDrawRange(0, sent);
+    v3.packets.geometry.attributes.position.needsUpdate = true; v3.packets.geometry.attributes.color.needsUpdate = true;
 
     const ep = edges.geometry.attributes.position.array, ec = edges.geometry.attributes.color.array;
     let count = 0;
@@ -864,10 +956,14 @@
     for (; used < rings.length; used++) rings[used].visible = false;
 
     if ((state.playing || COMPACT) && performance.now() - orbit.idle > 2500) orbit.theta += dt * 0.08;
+    // Entering 3D, the camera swoops in from higher and further away.
+    const settle = 1 - ease(Math.min(1, (performance.now() - v3.intro) / 1600));
+    const radius = orbit.radius * (1 + 0.75 * settle), phi = Math.max(0.15, orbit.phi - 0.45 * settle);
+    const theta = orbit.theta - 0.9 * settle;
     camera.position.set(
-      target.x + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta),
-      target.y + orbit.radius * Math.cos(orbit.phi),
-      target.z + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta));
+      target.x + radius * Math.sin(phi) * Math.sin(theta),
+      target.y + radius * Math.cos(phi),
+      target.z + radius * Math.sin(phi) * Math.cos(theta));
     camera.lookAt(target);
     renderer.render(v3.scene, camera);
   }

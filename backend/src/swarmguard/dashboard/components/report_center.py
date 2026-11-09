@@ -5,7 +5,7 @@ from html import escape
 
 from ...experiments import RESULT_METRICS
 from ..error_states import render_empty_state
-from .comparison_panel import baseline_method, build_comparison_rows
+from .comparison_panel import baseline_method, leading_methods
 from .experiment_center import EXPERIMENT_LABELS, METHOD_LABELS, METRIC_LABELS
 
 
@@ -31,8 +31,10 @@ def build_report_document(
     author: str = "SwarmGuard Araştırma Ekibi",
     note: str = "",
 ) -> ReportDocument:
-    security = build_comparison_rows(result, "mean_infected_ratio")[0]
-    connectivity = build_comparison_rows(result, "mean_largest_component_ratio")[0]
+    def leaders(metric: str) -> str:
+        rows = leading_methods(result, metric)
+        return rows[0].method if len(rows) == 1 else " = ".join(row.label for row in rows)
+
     return ReportDocument(
         experiment_id=str(result["experiment_id"]),
         title=title.strip() or "SwarmGuard Deney Raporu",
@@ -42,8 +44,8 @@ def build_report_document(
         run_count=int(result["run_count"]),
         seed_count=len(result["seeds"]),
         baseline=baseline_method(result),
-        best_security_method=security.method,
-        best_connectivity_method=connectivity.method,
+        best_security_method=leaders("mean_infected_ratio"),
+        best_connectivity_method=leaders("mean_largest_component_ratio"),
         fingerprint=str(result["manifest"]["fingerprint"]),
     )
 
