@@ -5,6 +5,8 @@ from itertools import pairwise
 import numpy as np
 
 from swarmguard import SimulationEngine
+from swarmguard.config import DefenseStrategy
+from swarmguard.dashboard.control_deck import MAX_DECK_FRAMES, deck_arguments
 from swarmguard.dashboard.player import (
     MAX_PLAYER_FRAMES,
     build_player_payload,
@@ -35,6 +37,18 @@ def test_fiedler_signs_are_aligned_between_frames() -> None:
     assert vectors is not None
     for (_, previous), (_, current) in pairwise(vectors):
         assert float(np.dot(previous, current)) >= 0
+
+
+def test_control_deck_ships_the_spectrum_and_positions_of_the_free_run() -> None:
+    config = replace(DEMO_CONFIG, defense_strategy=DefenseStrategy.NONE, steps=300)
+    frames = SimulationEngine(config).run()
+    arguments = deck_arguments(config, frames)
+
+    assert arguments["beta"] == config.beta and arguments["range"] == config.communication_range
+    assert 0 < len(arguments["radii"]) <= MAX_DECK_FRAMES
+    assert len(arguments["positions"]) == len(arguments["radii"])
+    assert len(arguments["positions"][0]) == 2 * config.node_count
+    assert all(radius > 0 for radius in arguments["radii"])
 
 
 def test_long_runs_are_strided_and_html_cannot_be_broken_out_of() -> None:

@@ -9,6 +9,8 @@ from ..charts import duel_figure, infection_map_figure, summarize_run, timeserie
 from ..components.event_center import render_event_center
 from ..components.node_inspector import render_node_inspector
 from ..components.scenario_builder import DEFENSE_LABELS, render_scenario_builder
+from ..components.theory_lab import undefended
+from ..control_deck import render_control_deck
 from ..performance import cached_simulation
 from ..player import render_swarm_player
 from ..simulation_session import reset_playback
@@ -28,49 +30,49 @@ def activate_scenario(session_state, config: SimulationConfig) -> None:
 
 
 def _render_quick_lab(st, config: SimulationConfig, version: int, *, with_defense: bool) -> None:
-    keys = {name: f"quick-{name}-{version}" for name in ("beta", "gamma", "range", "defense")}
+    defense_key = f"quick-defense-{version}"
 
-    def apply() -> None:
-        changes = {
-            "beta": float(st.session_state[keys["beta"]]),
-            "gamma": float(st.session_state[keys["gamma"]]),
-            "communication_range": float(st.session_state[keys["range"]]),
-        }
-        if keys["defense"] in st.session_state:
-            changes["defense_strategy"] = st.session_state[keys["defense"]]
-        activate_scenario(st.session_state, replace(st.session_state["config"], **changes))
+    def apply_defense() -> None:
+        updated = replace(
+            st.session_state["config"], defense_strategy=st.session_state[defense_key]
+        )
+        activate_scenario(st.session_state, updated)
 
     def reseed() -> None:
         current = st.session_state["config"]
         activate_scenario(st.session_state, replace(current, seed=random.randrange(2**31)))
 
-    widths = [1, 1, 1.15, 1.35, 0.75] if with_defense else [1, 1, 1.15, 0.75]
-    columns = st.columns(widths, vertical_alignment="bottom")
-    columns[0].slider(
-        "Bulaş · β", 0.0, 1.0, float(config.beta), 0.01, key=keys["beta"], on_change=apply
-    )
-    columns[1].slider(
-        "İyileşme · γ", 0.0, 1.0, float(config.gamma), 0.01, key=keys["gamma"], on_change=apply
-    )
-    columns[2].slider(
-        "Menzil · r (m)",
-        50.0,
-        max(600.0, float(config.communication_range)),
-        float(config.communication_range),
-        10.0,
-        key=keys["range"],
-        on_change=apply,
-    )
+    # β, γ and range live in the control deck: it redraws σ̄, β* and the phase plane while
+    # a slider moves and reports the values once it is released.
+    value = render_control_deck(config, cached_simulation(undefended(config)))
+    if isinstance(value, dict) and value.get("nonce") != st.session_state.get("deck-nonce"):
+        st.session_state["deck-nonce"] = value.get("nonce")
+        try:
+            updated = replace(
+                config,
+                beta=float(value["beta"]),
+                gamma=float(value["gamma"]),
+                communication_range=float(value["range"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            updated = config
+        if updated != config:
+            activate_scenario(st.session_state, updated)
+            st.rerun()
+
+    columns = st.columns([3, 1] if with_defense else [4, 1], vertical_alignment="bottom")
     if with_defense:
         strategies = list(DefenseStrategy)
-        columns[3].selectbox(
+        columns[0].selectbox(
             "Savunma",
             strategies,
             index=strategies.index(config.defense_strategy),
             format_func=DEFENSE_LABELS.get,
-            key=keys["defense"],
-            on_change=apply,
+            key=defense_key,
+            on_change=apply_defense,
         )
+    else:
+        columns[0].caption("Düelloda savunmalar aşağıdaki A ve B seçicilerinden belirlenir.")
     columns[-1].button(
         "🎲 Yeni sürü",
         on_click=reseed,

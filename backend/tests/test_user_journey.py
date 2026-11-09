@@ -2,6 +2,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from swarmguard.config import DefenseStrategy
+
 
 def contains_markdown(app: AppTest, text: str) -> bool:
     return any(text in str(element.value) for element in app.markdown)
@@ -50,11 +52,13 @@ def test_user_journey_tunes_the_live_lab_and_runs_a_duel() -> None:
         "render_simulation_page()",
         default_timeout=90,
     ).run()
-    next(item for item in app.slider if item.label == "Bulaş · β").set_value(0.42)
+    next(item for item in app.selectbox if item.label == "Savunma").set_value(
+        DefenseStrategy.CENTRALITY_QUARANTINE
+    )
     app.run()
 
     assert not app.exception
-    assert app.session_state["config"].beta == 0.42
+    assert app.session_state["config"].defense_strategy is DefenseStrategy.CENTRALITY_QUARANTINE
     assert app.session_state["config_version"] == 1
 
     app.segmented_control[0].set_value("duel")
