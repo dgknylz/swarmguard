@@ -38,7 +38,11 @@ Deney ekranı her yöntem için baseline'ı geçtiği seed sayısını, Holm dü
 eşleştirilmiş t testi p değerini, etki büyüklüğünü ve ortak rastgele sayıların
 sağladığı varyans azalmasını raporlar. Simülasyon artık tarayıcıda 60 fps
 çalışan bir canvas oynatıcısıyla izlenir (kareler arası enterpolasyon, canlı σ(t)
-göstergesi, Perron ağırlıklı İHA incelemesi).
+göstergesi, Perron ağırlıklı İHA incelemesi). Oynatıcının **Matematik** katmanları
+düğümleri Perron ağırlığına göre ısı rengiyle, kenarları λ₁'e katkılarına
+(2uᵢuⱼ) göre kalınlıkla gösterir ve Fiedler vektörüyle ağın en zayıf kesimini
+iki renkte ayırır. **3B** görünüm, `static/` klasörüne gömülü three.js ile
+internet bağlantısı olmadan da çalışır.
 
 ## Şu anki durum: 47 / 47 adım tamamlandı
 

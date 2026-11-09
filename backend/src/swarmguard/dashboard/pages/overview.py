@@ -96,7 +96,13 @@ def render_overview_page() -> None:
     with hero_visual:
         config = showcase_config()
         render_swarm_player(
-            st, cached_simulation(config), config, height=440, compact=True, autoplay=True
+            st,
+            cached_simulation(config),
+            config,
+            height=460,
+            compact=True,
+            autoplay=True,
+            view="3d",
         )
 
     st.markdown("#### Matematiksel omurga")

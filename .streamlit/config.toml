@@ -9,6 +9,8 @@ font = "sans serif"
 [server]
 headless = true
 runOnSave = false
+# Serves ./static (the vendored three.js for the 3D player) at /app/static.
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false
