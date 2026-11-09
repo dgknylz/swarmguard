@@ -18,8 +18,12 @@
   #root.compact { --dock: 6px; }
   #stage { position: absolute; inset: 0 0 var(--dock) 0; cursor: crosshair; outline: none; }
   canvas { display: block; }
+  /* Three stacked layers: static backdrop, low-resolution haze, moving scene. */
+  #stage canvas { position: absolute; left: 0; top: 0; }
+  /* No backdrop-filter: the scene under these panels changes every frame, so a blur would be
+     recomputed by the compositor 60 times a second. The panel is opaque enough without it. */
   .glass { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    backdrop-filter: blur(14px); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
   #hud { position: absolute; top: 14px; left: 14px; width: 248px; padding: 12px 14px; pointer-events: none; }
   #hud .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   #hud .time { font: 700 22px/1 "JetBrains Mono", Consolas, monospace; letter-spacing: -0.02em; }
@@ -114,7 +118,7 @@
 </head>
 <body>
 <div id="root">
-  <div id="stage" tabindex="0"><canvas id="view"></canvas></div>
+  <div id="stage" tabindex="0"><canvas id="backdrop"></canvas><canvas id="haze"></canvas><canvas id="view"></canvas></div>
   <div id="hud" class="glass">
     <span id="badge"></span>
     <div class="row"><div class="time" id="time">t 0</div><span class="pill" id="status">HAZIR</span></div>
@@ -172,6 +176,10 @@
   const COMPACT = !!META.compact;
   const $ = (id) => document.getElementById(id);
   const root = $("root"), stage = $("stage"), canvas = $("view"), ctx = canvas.getContext("2d");
+  // The backdrop is painted once per resize and the haze layer at a third of the
+  // resolution; the browser composites and upscales both on the GPU for free.
+  const backdrop = $("backdrop"), backdropContext = backdrop.getContext("2d");
+  const haze = $("haze"), hazeContext = haze.getContext("2d"), HAZE_SCALE = 1 / 3;
   const tl = $("timeline"), tctx = tl.getContext("2d");
   if (COMPACT) root.classList.add("compact");
 
@@ -191,6 +199,25 @@
   const HAS_FIEDLER = FR.every((f) => Array.isArray(f.v));
   const DRONES = N <= 90;  // quadcopter glyphs while they stay readable, dots beyond
   let topo = null;
+  // Render budget: if a frame keeps costing too much, drop the decorative passes for good.
+  const perf = { cost: 4, lite: false, onScreen: true };
+  // Stamps (sprites, the cached timeline) live in CPU memory: the GPU uploads them once and
+  // caches the texture, while a CPU-rasterised scene can use them directly. A GPU-side stamp
+  // drawn into a CPU canvas would be copied back from the GPU on every single draw.
+  const STAMP = { willReadFrequently: true };
+  function sprite(size, stops) {
+    const canvas2 = document.createElement("canvas"); canvas2.width = canvas2.height = size;
+    const g = canvas2.getContext("2d", STAMP), grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    for (const [offset, color] of stops) grad.addColorStop(offset, color);
+    g.fillStyle = grad; g.fillRect(0, 0, size, size);
+    return canvas2;
+  }
+  // Glows are drawn once into small canvases and stamped with drawImage every frame.
+  const SPRITE = {
+    glow: sprite(96, [[0, "rgba(251,113,133,0.85)"], [0.3, "rgba(251,113,133,0.32)"], [1, "rgba(251,113,133,0)"]]),
+    haze: sprite(128, [[0, "rgba(251,113,133,0.15)"], [1, "rgba(251,113,133,0)"]]),
+    packet: sprite(48, [[0, "rgba(255,240,242,1)"], [0.25, "rgba(255,190,200,0.9)"], [0.55, "rgba(251,113,133,0.35)"], [1, "rgba(251,113,133,0)"]]),
+  };
 
   // Per-frame caches ---------------------------------------------------------------
   const cache = { inf: [], det: [], quar: [], keys: [], adj: [], perron: new Map(), spec: [], tx: [] };
@@ -275,13 +302,54 @@
   const geometricSigma = (k) => (k < 1 ? NaN : Math.exp(logSigma[k] / k));
   const actionCount = FR.map((f) => f.ev.filter((e) => e[0] === "add_edge" || e[0] === "remove_edge" || e[0] === "quarantine_node").length);
 
+  // Motion between recorded steps --------------------------------------------------------
+  // UAVs fly straight at constant speed and bounce off the walls. A Catmull-Rom spline
+  // through the recorded positions is exactly the straight line on every leg without a
+  // bounce, and turns each bounce into a smooth curve instead of a sharp V. curve() returns
+  // the position and the velocity (metres per step), clamped to the mission area.
+  const motion = new Float64Array(4);
+  function curve(i, k, t) {
+    const k0 = Math.max(0, k - 1), k2 = Math.min(LAST, k + 1), k3 = Math.min(LAST, k + 2);
+    for (let axis = 0; axis < 2; axis++) {
+      const j = 2 * i + axis, p1 = FR[k].p[j], p2 = FR[k2].p[j];
+      // Past either end of the recording the missing point is extrapolated linearly.
+      const p0 = k0 === k ? 2 * p1 - p2 : FR[k0].p[j], p3 = k3 === k2 ? 2 * p2 - p1 : FR[k3].p[j];
+      const b = p2 - p0, c = 2 * p0 - 5 * p1 + 4 * p2 - p3, d = 3 * (p1 - p2) + p3 - p0;
+      motion[axis] = p1 + 0.5 * t * (b + t * (c + t * d));
+      motion[2 + axis] = 0.5 * (b + t * (2 * c + 3 * t * d));
+    }
+    motion[0] = Math.min(META.w, Math.max(0, motion[0]));
+    motion[1] = Math.min(META.h, Math.max(0, motion[1]));
+    return motion;
+  }
+  // Mean distance flown per step: the 3D lean is scaled by it, so it fades through a
+  // head-on bounce instead of flipping.
+  let STRIDE = 0;
+  for (let k = 1; k <= LAST; k++) {
+    const p = FR[k - 1].p, q = FR[k].p;
+    for (let i = 0; i < N; i++) STRIDE += Math.hypot(q[2 * i] - p[2 * i], q[2 * i + 1] - p[2 * i + 1]);
+  }
+  STRIDE = STRIDE / Math.max(1, LAST * N) || 1;
+  // The drawn nose chases the direction of travel, so even a head-on bounce is a quick
+  // turn rather than a jump.
+  const headings = new Float64Array(N).fill(NaN);
+  function steer(i, vx, vy, dt) {
+    if (Math.abs(vx) + Math.abs(vy) < 1e-9) return;
+    const target = Math.atan2(-vy, vx), h = headings[i];
+    if (Number.isNaN(h)) { headings[i] = target; return; }
+    headings[i] = h + Math.atan2(Math.sin(target - h), Math.cos(target - h)) * (1 - Math.exp(-dt * 14));
+  }
+
   // Layout ---------------------------------------------------------------------------
   const view = { s: 1, ox: 0, oy: 0, w: 1, h: 1, dpr: 1, r: 6 };
   function layout() {
     const box = stage.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, box.width * dpr); canvas.height = Math.max(1, box.height * dpr);
-    canvas.style.width = box.width + "px"; canvas.style.height = box.height + "px";
+    const dpr = Math.min(window.devicePixelRatio || 1, perf.lite ? 1.25 : 2);
+    for (const layer of [canvas, backdrop, haze]) {
+      const factor = layer === haze ? HAZE_SCALE : dpr;
+      layer.width = Math.max(1, Math.round(box.width * factor)); layer.height = Math.max(1, Math.round(box.height * factor));
+      layer.style.width = box.width + "px"; layer.style.height = box.height + "px";
+    }
     const padX = COMPACT ? 16 : 30, padTop = COMPACT ? 16 : 26, padBottom = COMPACT ? 16 : 26;
     const s = Math.min((box.width - 2 * padX) / META.w, (box.height - padTop - padBottom) / META.h);
     Object.assign(view, { s, ox: (box.width - META.w * s) / 2, oy: padTop + (box.height - padTop - padBottom - META.h * s) / 2,
@@ -289,6 +357,9 @@
     const tb = tl.getBoundingClientRect();
     tl.width = Math.max(1, tb.width * dpr); tl.height = Math.max(1, tb.height * dpr);
     topo = COMPACT ? null : buildTopo(Math.round(META.w * s * dpr), Math.round(META.h * s * dpr));
+    backdropContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+    backdropContext.clearRect(0, 0, box.width, box.height);
+    drawArea(backdropContext);
     layout3d();
   }
   const sx = (x) => view.ox + x * view.s;
@@ -300,29 +371,29 @@
     const raw = span / 8, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
     return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
   }
-  function drawArea() {
+  function drawArea(g) {
     const x0 = sx(0), y0 = sy(META.h), w = META.w * view.s, h = META.h * view.s;
-    ctx.fillStyle = "rgba(9, 24, 30, 0.55)";
-    ctx.fillRect(x0, y0, w, h);
-    if (topo) ctx.drawImage(topo, x0, y0, w, h);
+    g.fillStyle = "rgba(9, 24, 30, 0.55)";
+    g.fillRect(x0, y0, w, h);
+    if (topo) g.drawImage(topo, x0, y0, w, h);
     const step = niceStep(Math.max(META.w, META.h));
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(140, 200, 205, 0.055)";
-    ctx.beginPath();
-    for (let x = step; x < META.w; x += step) { ctx.moveTo(sx(x), y0); ctx.lineTo(sx(x), y0 + h); }
-    for (let y = step; y < META.h; y += step) { ctx.moveTo(x0, sy(y)); ctx.lineTo(x0 + w, sy(y)); }
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(94, 234, 212, 0.25)";
-    ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+    g.lineWidth = 1;
+    g.strokeStyle = "rgba(140, 200, 205, 0.055)";
+    g.beginPath();
+    for (let x = step; x < META.w; x += step) { g.moveTo(sx(x), y0); g.lineTo(sx(x), y0 + h); }
+    for (let y = step; y < META.h; y += step) { g.moveTo(x0, sy(y)); g.lineTo(x0 + w, sy(y)); }
+    g.stroke();
+    g.strokeStyle = "rgba(94, 234, 212, 0.25)";
+    g.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
     if (!COMPACT) {
-      ctx.fillStyle = "rgba(127, 152, 157, 0.75)";
-      ctx.font = "600 10px Inter, sans-serif";
-      ctx.fillText(`${META.w} × ${META.h} m · menzil r = ${META.r} m`, x0 + 8, y0 + h - 8);
+      g.fillStyle = "rgba(127, 152, 157, 0.75)";
+      g.font = "600 10px Inter, sans-serif";
+      g.fillText(`${META.w} × ${META.h} m · menzil r = ${META.r} m`, x0 + 8, y0 + h - 8);
       const bar = step * view.s, bx = x0 + w - bar - 10, by = y0 + h - 12;
-      ctx.strokeStyle = "rgba(230, 244, 242, 0.55)";
-      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bar, by); ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by + 4);
-      ctx.moveTo(bx + bar, by - 4); ctx.lineTo(bx + bar, by + 4); ctx.stroke();
-      ctx.fillText(`${step} m`, bx + bar / 2 - 12, by - 6);
+      g.strokeStyle = "rgba(230, 244, 242, 0.55)";
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + bar, by); g.moveTo(bx, by - 4); g.lineTo(bx, by + 4);
+      g.moveTo(bx + bar, by - 4); g.lineTo(bx + bar, by + 4); g.stroke();
+      g.fillText(`${step} m`, bx + bar / 2 - 12, by - 6);
     }
   }
   function strokePairs(list, style, width, alpha, dash, offset = 0) {
@@ -364,32 +435,42 @@
   function drawTransmissions(k1, alpha) {
     const pairs = transmissions(k1);
     if (!pairs.length) return;
-    const t = ease(Math.min(1, alpha * 1.15));
+    const t = ease(Math.min(1, alpha * 1.15)), glow = view.r * 1.6;
     ctx.save();
+    ctx.lineWidth = 2.6; ctx.lineCap = "round"; ctx.strokeStyle = "rgba(251, 113, 133, 0.75)";
+    ctx.beginPath();
+    for (let j = 0; j < pairs.length; j += 2) {
+      const a = pairs[j], b = pairs[j + 1], tail = Math.max(0, t - 0.22);
+      const x0 = pts[2 * a], y0 = pts[2 * a + 1], x1 = pts[2 * b], y1 = pts[2 * b + 1];
+      ctx.moveTo(x0 + (x1 - x0) * tail, y0 + (y1 - y0) * tail); ctx.lineTo(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    }
+    ctx.stroke();
     for (let j = 0; j < pairs.length; j += 2) {
       const a = pairs[j], b = pairs[j + 1];
-      const x0 = pts[2 * a], y0 = pts[2 * a + 1], x1 = pts[2 * b], y1 = pts[2 * b + 1];
-      const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t, tail = Math.max(0, t - 0.22);
-      const grad = ctx.createLinearGradient(x0 + (x1 - x0) * tail, y0 + (y1 - y0) * tail, x, y);
-      grad.addColorStop(0, "rgba(251, 113, 133, 0)"); grad.addColorStop(1, "rgba(251, 113, 133, 0.95)");
-      ctx.strokeStyle = grad; ctx.lineWidth = 3; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(x0 + (x1 - x0) * tail, y0 + (y1 - y0) * tail); ctx.lineTo(x, y); ctx.stroke();
-      ctx.shadowBlur = 16; ctx.shadowColor = "rgba(251, 113, 133, 1)"; ctx.fillStyle = "#ffe4e6";
-      ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 2 * Math.PI); ctx.fill(); ctx.shadowBlur = 0;
+      const x = pts[2 * a] + (pts[2 * b] - pts[2 * a]) * t, y = pts[2 * a + 1] + (pts[2 * b + 1] - pts[2 * a + 1]) * t;
+      ctx.drawImage(SPRITE.packet, x - glow, y - glow, 2 * glow, 2 * glow);
     }
     ctx.restore();
   }
+  // Contrails follow the flown curve over the last 0.7 steps, so they bend around bounces.
+  const TRAIL_SPAN = 0.7, TRAIL_SAMPLES = 4;
   function drawTrails(k, alpha) {
-    if (N > 200 || COMPACT) return;
-    const back = Math.max(0, state.tau - 0.7), j = Math.min(LAST, Math.floor(back)), j1 = Math.min(LAST, j + 1), a = back - j;
-    const p = FR[j].p, q = FR[j1].p;
-    ctx.save(); ctx.lineCap = "round"; ctx.lineWidth = view.r * 0.9;
-    for (let i = 0; i < N; i++) {
-      const x = sx(p[2 * i] + (q[2 * i] - p[2 * i]) * a), y = sy(p[2 * i + 1] + (q[2 * i + 1] - p[2 * i + 1]) * a);
-      const grad = ctx.createLinearGradient(x, y, pts[2 * i], pts[2 * i + 1]);
-      const tone = infected(k).has(i) ? "251, 113, 133" : "94, 234, 212";
-      grad.addColorStop(0, `rgba(${tone}, 0)`); grad.addColorStop(1, `rgba(${tone}, 0.28)`);
-      ctx.strokeStyle = grad; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(pts[2 * i], pts[2 * i + 1]); ctx.stroke();
+    if (N > 200 || COMPACT || perf.lite) return;
+    const inf = infected(k);
+    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = view.r * 0.8;
+    for (const sick of [false, true]) {
+      ctx.strokeStyle = sick ? "rgba(251, 113, 133, 0.2)" : "rgba(94, 234, 212, 0.16)";
+      ctx.beginPath();
+      for (let i = 0; i < N; i++) {
+        if (inf.has(i) !== sick) continue;
+        for (let s = TRAIL_SAMPLES; s >= 1; s--) {
+          const back = Math.max(0, state.tau - (TRAIL_SPAN * s) / TRAIL_SAMPLES), j = Math.min(LAST, Math.floor(back));
+          const c = curve(i, j, back - j);
+          if (s === TRAIL_SAMPLES) ctx.moveTo(sx(c[0]), sy(c[1])); else ctx.lineTo(sx(c[0]), sy(c[1]));
+        }
+        ctx.lineTo(pts[2 * i], pts[2 * i + 1]);
+      }
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -413,16 +494,15 @@
     }
     strokePairs(plus, rgba(COLOR.cyan, 1), 1, 0.3);
     strokePairs(minus, rgba(COLOR.violet, 1), 1, 0.3);
-    ctx.save(); ctx.shadowBlur = 9; ctx.shadowColor = rgba(COLOR.amber, 0.9);
+    // A wide faint stroke underneath fakes the glow without a per-pixel blur.
+    strokePairs(cut, rgba(COLOR.amber, 1), 7, 0.16);
     strokePairs(cut, rgba(COLOR.amber, 1), 2.4, 0.95, [6, 4]);
-    ctx.restore();
   }
   function drawDefenseEdges(k, time = 0) {
     strokePairs(FR[k].x, rgba(COLOR.red, 1), 1.2, 0.5, [3, 5]);
-    ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = rgba(COLOR.cyan, 0.9);
+    strokePairs(FR[k].a, rgba(COLOR.cyan, 1), 6, 0.16);
     // Marching dashes make the relay links read as live connections.
     strokePairs(FR[k].a, rgba(COLOR.cyan, 1), 1.8, 0.95, [7, 4], -((time * 26) % 11));
-    ctx.restore();
     if (state.selected >= 0) {
       const lists = adjacency(k), s = state.selected, pairs = [];
       for (const j of lists[s]) pairs.push(s, j);
@@ -458,11 +538,13 @@
       const color = health ? mix(COLOR.mint, COLOR.red, t) : layerColor(i, k);
       const grow = i === state.selected ? 1.35 : i === state.hover ? 1.2 : 1;
       const outer = DRONES ? R * grow * 1.3 : R * grow;
+      if (health && t > 0.05) {
+        // Pre-rendered glow sprite: same look as shadowBlur at a fraction of the cost.
+        const glow = outer * (2.3 + 0.35 * Math.sin(time * 4 + i));
+        ctx.globalAlpha = t; ctx.drawImage(SPRITE.glow, x - glow, y - glow, 2 * glow, 2 * glow); ctx.globalAlpha = 1;
+      }
       if (DRONES) {
-        const glowing = health && t > 0.05;
-        if (glowing) { ctx.save(); ctx.shadowBlur = (14 + 6 * Math.sin(time * 4 + i)) * t; ctx.shadowColor = rgba(COLOR.red, 0.95); }
-        drawDrone(x, y, R * 0.8 * grow, headingOf(i, k, k1), color, time, i);
-        if (glowing) ctx.restore();
+        drawDrone(x, y, R * 0.8 * grow, headings[i] || 0, color, time, i);
         if (!health && t > 0.5) {
           ctx.strokeStyle = rgba(COLOR.red, 0.95); ctx.lineWidth = 2;
           ctx.beginPath(); ctx.arc(x, y, outer + 1.5, 0, 2 * Math.PI); ctx.stroke();
@@ -475,12 +557,8 @@
           ctx.beginPath(); ctx.arc(x, y, R * grow + 2.5, 0, 2 * Math.PI); ctx.stroke();
         }
       } else if (t > 0.05) {
-        ctx.save();
-        ctx.shadowBlur = (14 + 6 * Math.sin(time * 4 + i)) * t;
-        ctx.shadowColor = rgba(COLOR.red, 0.95);
         ctx.fillStyle = rgba(color, 1);
         ctx.beginPath(); ctx.arc(x, y, R * grow, 0, 2 * Math.PI); ctx.fill();
-        ctx.restore();
       } else {
         ctx.fillStyle = rgba(color, 0.95);
         ctx.beginPath(); ctx.arc(x, y, R * grow, 0, 2 * Math.PI); ctx.fill();
@@ -498,9 +576,10 @@
         const fresh = k > 0 && !quarantined(k - 1).has(i), grow2 = Math.min(1, alpha * 1.8);
         const pop = fresh ? 1 + 0.9 * (1 - ease(grow2)) : 1;
         ctx.save(); ctx.globalAlpha = fresh ? 0.35 + 0.65 * grow2 : 1;
-        ctx.strokeStyle = rgba(COLOR.amber, 0.95); ctx.lineWidth = 1.8; ctx.setLineDash([4, 3]);
-        ctx.shadowBlur = 8; ctx.shadowColor = rgba(COLOR.amber, 0.7);
-        hexagon(x, y, (outer + 6) * pop, time * 0.5); ctx.stroke(); ctx.restore();
+        hexagon(x, y, (outer + 6) * pop, time * 0.5);
+        ctx.strokeStyle = rgba(COLOR.amber, 0.18); ctx.lineWidth = 6; ctx.stroke();
+        ctx.strokeStyle = rgba(COLOR.amber, 0.95); ctx.lineWidth = 1.8; ctx.setLineDash([4, 3]); ctx.stroke();
+        ctx.restore();
       }
       if (i === state.selected) {
         ctx.strokeStyle = rgba(COLOR.white, 0.95); ctx.lineWidth = 2;
@@ -513,41 +592,48 @@
     }
   }
   // Quadcopter glyph: X frame, four spinning rotors and a nose that faces the flight direction.
+  // Five batched draw calls per drone; setTransform avoids save/restore churn.
+  const ROTORS = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
   function drawDrone(x, y, size, heading, color, time, i) {
-    const arm = size * 1.35 * Math.SQRT1_2, rotor = size * 0.58;
-    ctx.save(); ctx.translate(x, y); ctx.rotate(heading);
-    ctx.strokeStyle = rgba(color, 0.85); ctx.lineWidth = Math.max(1.2, size * 0.24); ctx.lineCap = "round";
+    const arm = size * 1.35 * Math.SQRT1_2, rotor = size * 0.58, d = view.dpr, c = Math.cos(heading), s = Math.sin(heading);
+    const paint = rgba(color, 1);
+    ctx.setTransform(d * c, d * s, -d * s, d * c, d * x, d * y);
+    ctx.strokeStyle = paint; ctx.fillStyle = paint; ctx.lineCap = "round";
+    ctx.globalAlpha = 0.85; ctx.lineWidth = Math.max(1.2, size * 0.24);
     ctx.beginPath(); ctx.moveTo(-arm, -arm); ctx.lineTo(arm, arm); ctx.moveTo(-arm, arm); ctx.lineTo(arm, -arm); ctx.stroke();
-    ctx.lineWidth = 1;
-    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-      const cx = sx * arm, cy = sy * arm, spin = time * 26 * sx * sy + i;
-      ctx.fillStyle = rgba(color, 0.14); ctx.beginPath(); ctx.arc(cx, cy, rotor, 0, 2 * Math.PI); ctx.fill();
-      ctx.strokeStyle = rgba(color, 0.8); ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(spin) * rotor, cy + Math.sin(spin) * rotor); ctx.lineTo(cx - Math.cos(spin) * rotor, cy - Math.sin(spin) * rotor); ctx.stroke();
+    ctx.globalAlpha = 0.14; ctx.beginPath();
+    for (const [rx, ry] of ROTORS) { ctx.moveTo(rx * arm + rotor, ry * arm); ctx.arc(rx * arm, ry * arm, rotor, 0, 2 * Math.PI); }
+    ctx.fill();
+    if (!perf.lite) {
+      ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.beginPath();
+      for (const [rx, ry] of ROTORS) {
+        const spin = time * 26 * rx * ry + i, bx = Math.cos(spin) * rotor, by = Math.sin(spin) * rotor;
+        ctx.moveTo(rx * arm + bx, ry * arm + by); ctx.lineTo(rx * arm - bx, ry * arm - by);
+      }
+      ctx.stroke();
     }
-    ctx.fillStyle = rgba(color, 1); ctx.beginPath(); ctx.arc(0, 0, size * 0.62, 0, 2 * Math.PI); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(0, 0, size * 0.62, 0, 2 * Math.PI); ctx.fill();
     ctx.fillStyle = "rgba(5, 18, 22, 0.75)"; ctx.beginPath(); ctx.arc(size * 0.26, 0, size * 0.2, 0, 2 * Math.PI); ctx.fill();
-    ctx.restore();
+    ctx.setTransform(d, 0, 0, d, 0, 0);
   }
-  function headingOf(i, k, k1) {
-    const from = k1 === k ? FR[Math.max(0, k - 1)].p : FR[k].p, to = k1 === k ? FR[k].p : FR[k1].p;
-    const dx = to[2 * i] - from[2 * i], dy = to[2 * i + 1] - from[2 * i + 1];
-    return dx || dy ? Math.atan2(-dy, dx) : 0;
-  }
-  // Soft red haze around infected UAVs, the "infection pressure" a neighbour feels.
+  // Soft red haze around infected UAVs, the "infection pressure" a neighbour feels. It is a
+  // blur by nature, so it lives on its own canvas at a third of the resolution.
+  let hazeShown = false;
   function drawHeat(k, k1, alpha) {
-    if (state.layer !== "health") return;
+    const g = hazeContext;
+    if (hazeShown) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, haze.width, haze.height); hazeShown = false; }
+    if (state.layer !== "health" || perf.lite) return;
     const infA = infected(k), infB = infected(k1), radius = META.r * view.s * 0.62;
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    g.setTransform(haze.width / view.w, 0, 0, haze.height / view.h, 0, 0);
+    g.globalCompositeOperation = "lighter";
     for (let i = 0; i < N; i++) {
       const a = infA.has(i), b = infB.has(i);
       if (!a && !b) continue;
-      const t = a === b ? 1 : b ? ease(alpha) : 1 - ease(alpha), x = pts[2 * i], y = pts[2 * i + 1];
-      const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      grad.addColorStop(0, `rgba(251, 113, 133, ${0.15 * t})`); grad.addColorStop(1, "rgba(251, 113, 133, 0)");
-      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x, y, radius, 0, 2 * Math.PI); ctx.fill();
+      g.globalAlpha = a === b ? 1 : b ? ease(alpha) : 1 - ease(alpha);
+      g.drawImage(SPRITE.haze, pts[2 * i] - radius, pts[2 * i + 1] - radius, 2 * radius, 2 * radius);
+      hazeShown = true;
     }
-    ctx.restore();
+    g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
   }
   // Procedural contour map under the mission area (value noise + marching squares).
   function buildTopo(wpx, hpx) {
@@ -614,14 +700,14 @@
     if (state.mode === "3d" && v3.ready) {
       render3d(k, k1, alpha, time, dt);
     } else {
-      const p = FR[k].p, q = FR[k1].p;
       for (let i = 0; i < N; i++) {
-        pts[2 * i] = sx(p[2 * i] + (q[2 * i] - p[2 * i]) * alpha);
-        pts[2 * i + 1] = sy(p[2 * i + 1] + (q[2 * i + 1] - p[2 * i + 1]) * alpha);
+        const c = curve(i, k, alpha);
+        pts[2 * i] = sx(c[0]); pts[2 * i + 1] = sy(c[1]);
+        steer(i, c[2], c[3], dt);
       }
+      // The mission area, contour map and grid sit on the backdrop canvas, painted in layout().
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       ctx.clearRect(0, 0, view.w, view.h);
-      drawArea();
       drawRanges(k);
       drawHeat(k, k1, alpha);
       drawTrails(k, alpha);
@@ -749,11 +835,26 @@
   const finite = sigmas.filter((x) => Number.isFinite(x));
   const sigmaLow = Math.min(0.9, ...finite), sigmaHigh = Math.max(1.1, ...finite);
   const maxActions = Math.max(1, ...actionCount);
+  // The curves never change, so they are drawn once per resize into tlBase and only the
+  // playhead is drawn every frame.
+  let tlBase = null;
   function drawTimeline() {
     if (COMPACT) return;
     const dpr = view.dpr, w = tl.width / dpr, h = tl.height / dpr;
+    if (!tlBase || tlBase.width !== tl.width || tlBase.height !== tl.height) tlBase = buildTimelineBase(w, h, dpr);
+    tctx.setTransform(1, 0, 0, 1, 0, 0);
+    tctx.clearRect(0, 0, tl.width, tl.height);
+    tctx.drawImage(tlBase, 0, 0);
     tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    tctx.clearRect(0, 0, w, h);
+    const x = LAST ? (state.tau / LAST) * (w - 2) + 1 : w / 2;
+    tctx.fillStyle = "rgba(236, 248, 246, 0.95)"; tctx.fillRect(x - 1, 0, 2, h);
+    tctx.beginPath(); tctx.arc(x, 4, 4, 0, 2 * Math.PI); tctx.fill();
+  }
+  function buildTimelineBase(w, h, dpr) {
+    const base = document.createElement("canvas");
+    base.width = Math.max(1, Math.round(w * dpr)); base.height = Math.max(1, Math.round(h * dpr));
+    const tctx = base.getContext("2d", STAMP);
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     tctx.fillStyle = "rgba(255, 255, 255, 0.025)"; tctx.fillRect(0, 0, w, h);
     const X = (k) => (LAST ? (k / LAST) * (w - 2) + 1 : w / 2);
     const top = 6, bottom = h - 10;
@@ -775,9 +876,7 @@
     tctx.stroke();
     tctx.fillStyle = "rgba(56, 189, 248, 0.85)";
     for (let k = 0; k <= LAST; k++) if (actionCount[k]) { const bh = 2 + 5 * (actionCount[k] / maxActions); tctx.fillRect(X(k) - 0.6, h - bh, 1.6, bh); }
-    const x = X(state.tau);
-    tctx.fillStyle = "rgba(236, 248, 246, 0.95)"; tctx.fillRect(x - 1, 0, 2, h);
-    tctx.beginPath(); tctx.arc(x, 4, 4, 0, 2 * Math.PI); tctx.fill();
+    return base;
   }
   function seekFromEvent(event) {
     const box = tl.getBoundingClientRect();
@@ -921,7 +1020,7 @@
     }
     if (mode === "3d") v3.intro = performance.now();
     state.mode = mode;
-    canvas.style.display = mode === "3d" ? "none" : "block";
+    for (const layer of [backdrop, haze, canvas]) layer.style.display = mode === "3d" ? "none" : "block";
     if (v3.ready) v3.renderer.domElement.style.display = mode === "3d" ? "block" : "none";
     $("note3d").style.display = mode === "3d" && !COMPACT ? "block" : "none";
     $("tip").style.display = "none";
@@ -961,7 +1060,7 @@
   function init3d() {
     const T = window.THREE, W = META.w * UNIT, H = META.h * UNIT;
     const renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.domElement.id = "view3d";
     stage.appendChild(renderer.domElement);
     const scene = new T.Scene();
@@ -1050,6 +1149,7 @@
   function layout3d() {
     if (!v3.ready) return;
     const box = stage.getBoundingClientRect();
+    v3.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, perf.lite ? 1 : 1.5));
     v3.renderer.setSize(Math.max(1, box.width), Math.max(1, box.height), false);
     v3.renderer.domElement.style.width = box.width + "px"; v3.renderer.domElement.style.height = box.height + "px";
     v3.camera.aspect = box.width / Math.max(1, box.height); v3.camera.updateProjectionMatrix();
@@ -1068,12 +1168,14 @@
   }
   function render3d(k, k1, alpha, time, dt) {
     const { nodes, glow, edges, stems, rings, orbit, camera, renderer, matrix, color, world, target } = v3;
-    const p = FR[k].p, q = FR[k1].p, infA = infected(k), infB = infected(k1), health = state.layer === "health";
+    const infA = infected(k), infB = infected(k1), health = state.layer === "health";
     const gp = glow.geometry.attributes.position.array, gc = glow.geometry.attributes.color.array;
     const sp = stems.geometry.attributes.position.array, sc = stems.geometry.attributes.color.array;
+    const shade = v3.shadows.geometry.attributes.position.array;
+    // Every buffer below is written in place: no per-frame arrays, so no GC pauses.
     for (let i = 0; i < N; i++) {
-      const x = (p[2 * i] + (q[2 * i] - p[2 * i]) * alpha - META.w / 2) * UNIT;
-      const z = -(p[2 * i + 1] + (q[2 * i + 1] - p[2 * i + 1]) * alpha - META.h / 2) * UNIT;
+      const c = curve(i, k, alpha), dx = c[2], dz = -c[3];
+      const x = (c[0] - META.w / 2) * UNIT, z = -(c[1] - META.h / 2) * UNIT;
       const y = altitude(i, time);
       world[3 * i] = x; world[3 * i + 1] = y; world[3 * i + 2] = z;
       const a = infA.has(i), b = infB.has(i), t = a === b ? (a ? 1 : 0) : b ? ease(alpha) : 1 - ease(alpha);
@@ -1081,20 +1183,23 @@
       const rgb = health ? mix(COLOR.mint, COLOR.red, t) : layerColor(i, k);
       const scale = 1 + (health ? 0.4 * t * (0.5 + 0.5 * Math.sin(time * 5 + i)) : 0) + (i === state.selected ? 0.6 : 0);
       // Lean into the direction of travel and yaw slowly, like a hovering quadcopter.
-      const dx = q[2 * i] - p[2 * i], dz = -(q[2 * i + 1] - p[2 * i + 1]), moving = Math.hypot(dx, dz);
-      if (moving > 1e-6) v3.turn.setFromAxisAngle(v3.axis.set(dz / moving, 0, -dx / moving), 0.3);
+      // The lean follows the spline velocity and fades with speed, so a head-on bounce
+      // tilts the drone back through upright instead of flipping it.
+      const moving = Math.hypot(dx, dz);
+      if (moving > 1e-6) v3.turn.setFromAxisAngle(v3.axis.set(dz / moving, 0, -dx / moving), 0.3 * Math.min(1, moving / STRIDE));
       else v3.turn.identity();
       v3.turn.multiply(v3.spin.setFromAxisAngle(v3.up, time * 0.6 + i));
       matrix.compose(v3.spot.set(x, y, z), v3.turn, v3.size.set(scale, scale, scale));
       nodes.setMatrixAt(i, matrix);
-      v3.shadows.geometry.attributes.position.array.set([x, 0.004, z], 3 * i);
+      shade[3 * i] = x; shade[3 * i + 1] = 0.004; shade[3 * i + 2] = z;
       nodes.setColorAt(i, color.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255));
       const glowRgb = !health && t > 0.5 ? COLOR.red : i === state.selected ? COLOR.white : rgb;
       const g = i === state.selected ? 0.9 : health ? 0.22 + 0.78 * t : t > 0.5 ? 0.8 : 0.4;
       gp[3 * i] = x; gp[3 * i + 1] = y; gp[3 * i + 2] = z;
       gc[3 * i] = (glowRgb[0] / 255) * g; gc[3 * i + 1] = (glowRgb[1] / 255) * g; gc[3 * i + 2] = (glowRgb[2] / 255) * g;
-      sp.set([x, 0, z, x, y, z], 6 * i);
-      sc.set([0.05, 0.14, 0.16, 0.2 + 0.5 * t, 0.42, 0.45], 6 * i);
+      const o = 6 * i;
+      sp[o] = x; sp[o + 1] = 0; sp[o + 2] = z; sp[o + 3] = x; sp[o + 4] = y; sp[o + 5] = z;
+      sc[o] = 0.05; sc[o + 1] = 0.14; sc[o + 2] = 0.16; sc[o + 3] = 0.2 + 0.5 * t; sc[o + 4] = 0.42; sc[o + 5] = 0.45;
     }
     nodes.instanceMatrix.needsUpdate = true; nodes.instanceColor.needsUpdate = true;
     glow.geometry.attributes.position.needsUpdate = true; glow.geometry.attributes.color.needsUpdate = true;
@@ -1104,8 +1209,8 @@
     const hp = v3.halos.geometry.attributes.position.array, hc = v3.halos.geometry.attributes.color.array;
     for (let i = 0; i < N; i++) {
       const heat = 0.3 * v3.heat[i] * (0.8 + 0.2 * Math.sin(time * 3 + i));
-      hp.set([world[3 * i], 0.01, world[3 * i + 2]], 3 * i);
-      hc.set([heat, heat * 0.22, heat * 0.3], 3 * i);
+      hp[3 * i] = world[3 * i]; hp[3 * i + 1] = 0.01; hp[3 * i + 2] = world[3 * i + 2];
+      hc[3 * i] = heat; hc[3 * i + 1] = heat * 0.22; hc[3 * i + 2] = heat * 0.3;
     }
     v3.halos.geometry.setDrawRange(0, N);
     v3.halos.geometry.attributes.position.needsUpdate = true; v3.halos.geometry.attributes.color.needsUpdate = true;
@@ -1115,10 +1220,11 @@
     if (k1 !== k && health) {
       const pairs = transmissions(k1), travel = ease(Math.min(1, alpha * 1.15));
       for (let j = 0; j < pairs.length && sent < 256; j += 2, sent++) {
-        const a = 3 * pairs[j], b = 3 * pairs[j + 1];
-        kp.set([world[a] + (world[b] - world[a]) * travel, world[a + 1] + (world[b + 1] - world[a + 1]) * travel,
-          world[a + 2] + (world[b + 2] - world[a + 2]) * travel], 3 * sent);
-        kc.set([1, 0.6, 0.66], 3 * sent);
+        const a = 3 * pairs[j], b = 3 * pairs[j + 1], o = 3 * sent;
+        kp[o] = world[a] + (world[b] - world[a]) * travel;
+        kp[o + 1] = world[a + 1] + (world[b + 1] - world[a + 1]) * travel;
+        kp[o + 2] = world[a + 2] + (world[b + 2] - world[a + 2]) * travel;
+        kc[o] = 1; kc[o + 1] = 0.6; kc[o + 2] = 0.66;
       }
     }
     v3.packets.geometry.setDrawRange(0, sent);
@@ -1139,9 +1245,10 @@
     const ep = edges.geometry.attributes.position.array, ec = edges.geometry.attributes.color.array;
     let count = 0;
     const push = (a, b, rgb, intensity) => {
-      ep.set([world[3 * a], world[3 * a + 1], world[3 * a + 2], world[3 * b], world[3 * b + 1], world[3 * b + 2]], 6 * count);
-      const r = (rgb[0] / 255) * intensity, g = (rgb[1] / 255) * intensity, bl = (rgb[2] / 255) * intensity;
-      ec.set([r, g, bl, r, g, bl], 6 * count);
+      const o = 6 * count, r = (rgb[0] / 255) * intensity, g = (rgb[1] / 255) * intensity, bl = (rgb[2] / 255) * intensity;
+      ep[o] = world[3 * a]; ep[o + 1] = world[3 * a + 1]; ep[o + 2] = world[3 * a + 2];
+      ep[o + 3] = world[3 * b]; ep[o + 4] = world[3 * b + 1]; ep[o + 5] = world[3 * b + 2];
+      ec[o] = r; ec[o + 1] = g; ec[o + 2] = bl; ec[o + 3] = r; ec[o + 4] = g; ec[o + 5] = bl;
       count++;
     };
     const e = FR[k].e, s = health ? null : spectral(k);
@@ -1199,9 +1306,18 @@
       // The leading duel player keeps the other one on the same frame.
       if (channel && META.leader && now - (state.tick || 0) > 500) { state.tick = now; share("tick"); }
     }
-    render(now / 1000, dt);
+    // Off-screen players keep their clock but skip drawing.
+    if (perf.onScreen) {
+      const started = performance.now();
+      render(now / 1000, dt);
+      perf.cost = perf.cost * 0.92 + (performance.now() - started) * 0.08;
+      // A sustained 11 ms render leaves no headroom at 60 fps: switch to the lean renderer
+      // (no trails, haze or rotor blades, lower pixel ratio) for the rest of the session.
+      if (!perf.lite && state.playing && perf.cost > 11) { perf.lite = true; layout(); }
+    }
     requestAnimationFrame(frame);
   }
+  new IntersectionObserver(([entry]) => { perf.onScreen = entry.isIntersecting; }).observe(root);
   new ResizeObserver(layout).observe(root);
   layout();
   buildLegend();
