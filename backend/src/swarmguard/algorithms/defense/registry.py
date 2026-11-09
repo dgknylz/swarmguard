@@ -3,7 +3,9 @@ from .base import DefenseAlgorithm
 from .centrality_quarantine import CentralityQuarantineAlgorithm
 from .gtad_risk import GtadRiskAlgorithm
 from .none import NoDefenseAlgorithm
+from .random_addition import RandomAdditionAlgorithm
 from .random_rewiring import RandomRewiringAlgorithm
+from .spectral_shield import SpectralShieldAlgorithm
 
 
 def build_defense(
@@ -22,4 +24,8 @@ def build_defense(
         return CentralityQuarantineAlgorithm(budget)
     if strategy is DefenseStrategy.GTAD_RISK:
         return GtadRiskAlgorithm(budget, range_multiplier, maximum_degree)
+    if strategy is DefenseStrategy.SPECTRAL_SHIELD:
+        return SpectralShieldAlgorithm(budget, range_multiplier, maximum_degree)
+    if strategy is DefenseStrategy.RANDOM_ADDITION:
+        return RandomAdditionAlgorithm(seed, budget, range_multiplier, maximum_degree)
     raise ValueError(f"Desteklenmeyen savunma stratejisi: {strategy}")

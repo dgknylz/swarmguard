@@ -1,8 +1,38 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
+
+from ...config import DefenseStrategy, SimulationConfig
+from ...presets import DEMO_CONFIG
+
+THEOREM_CARDS = (
+    (
+        "TEOREM 1",
+        "Bağlantı olasılığı",
+        r"F(r)=\dfrac{\pi WHr^2-\frac43(W+H)r^3+\frac12r^4}{W^2H^2}",
+        "Görev alanının sınırları dahil kesin beklenen derece.",
+    ),
+    (
+        "TEOREM 2",
+        "Spektral üst sınır",
+        r"\mathbb E[I(t)]\le\sqrt{nI_0}\,\prod_{s\le t}\sigma(s)",
+        "σ̄ < 1 ise salgın üstel hızla söner.",
+    ),
+    (
+        "ÖNERME 3",
+        "Bulaş sınırı",
+        r"\mathbb E[\Delta I^+\mid X]\le\beta\,|\partial I|",
+        "Kesilmesi gereken nicelik: sağlıklı–enfekte kenarları.",
+    ),
+    (
+        "LEMMA 4",
+        "Rayleigh pertürbasyonu",
+        r"\lambda_1(A_{-i})\ge\lambda_1(1-2u_i^2)",
+        "Spektral Kalkan savunmasının matematiksel temeli.",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -30,98 +60,57 @@ def get_home_snapshot(session_state: Mapping[str, Any]) -> HomeSnapshot:
     )
 
 
+def showcase_config() -> SimulationConfig:
+    """The landing animation runs the spectral defense on the demo swarm."""
+    return replace(DEMO_CONFIG, defense_strategy=DefenseStrategy.SPECTRAL_SHIELD)
+
+
 def render_overview_page() -> None:
     import streamlit as st
 
-    snapshot = get_home_snapshot(st.session_state)
-    st.markdown(
-        f"""
-        <section class="sg-hero">
-            <div class="sg-hero-copy">
-                <div class="sg-hero-kicker"><span></span> OTONOM SÜRÜ SAVUNMA ARAŞTIRMA PLATFORMU</div>
-                <h2>Dinamik İHA ağlarını<br><em>saldırıya karşı dayanıklı</em> tasarla.</h2>
-                <p>Saldırı yayılımını modelle, adaptif topoloji savunmalarını çalıştır ve bilimsel sonuçları aynı tekrarlanabilir deney ortamında karşılaştır.</p>
+    from ..performance import cached_simulation
+    from ..player import render_swarm_player
+
+    hero_text, hero_visual = st.columns([1, 1.15], vertical_alignment="center", gap="large")
+    with hero_text:
+        st.markdown(
+            """
+            <section class="sg-landing">
+                <span class="sg-kicker">◈ SWARMGUARD · TÜBİTAK 2204 MATEMATİK</span>
+                <h1>Dinamik İHA ağlarını <em>spektral teoriyle</em> savun.</h1>
+                <p>Hareket eden bir İHA sürüsünde siber saldırının nasıl yayıldığını modelliyor,
+                yayılımın büyüklüğünü komşuluk matrisinin en büyük özdeğeriyle sınırlıyor ve bu
+                teoremden türetilen savunmayı simülasyonla sınıyoruz.</p>
+                <div class="sg-equation">σ(t) = 1 − γ + β · λ₁(A(t))
+                    <small>Projenin anahtar denklemi: geometrik ortalaması 1'in altındaysa salgın söner.</small>
+                </div>
                 <div class="sg-hero-actions">
                     <a class="sg-button sg-button-primary" href="simulation" target="_self">Simülasyonu aç <span>→</span></a>
-                    <a class="sg-button sg-button-secondary" href="methodology" target="_self">Metodolojiyi incele</a>
+                    <a class="sg-button sg-button-secondary" href="theory" target="_self">Teoremleri incele</a>
+                    <a class="sg-button sg-button-secondary" href="experiments" target="_self">Deney çalıştır</a>
                 </div>
-                <div class="sg-hero-proof">
-                    <div><strong>04</strong><span>Savunma yaklaşımı</span></div>
-                    <div><strong>04</strong><span>Bilimsel ağ metriği</span></div>
-                    <div><strong>100%</strong><span>Seed tekrarlanabilirliği</span></div>
-                </div>
-            </div>
-            <div class="sg-hero-visual" aria-label="Sürü ağı görselleştirmesi">
-                <div class="sg-radar-ring sg-ring-one"></div>
-                <div class="sg-radar-ring sg-ring-two"></div>
-                <div class="sg-radar-ring sg-ring-three"></div>
-                <div class="sg-network-line sg-line-one"></div>
-                <div class="sg-network-line sg-line-two"></div>
-                <div class="sg-network-line sg-line-three"></div>
-                <span class="sg-network-node sg-node-one"></span>
-                <span class="sg-network-node sg-node-two"></span>
-                <span class="sg-network-node sg-node-three"></span>
-                <span class="sg-network-node sg-node-four"></span>
-                <span class="sg-network-node sg-node-five"></span>
-                <div class="sg-radar-core">◈</div>
-                <div class="sg-visual-status"><span class="sg-status-dot sg-status-online"></span>{snapshot.status}</div>
-            </div>
-        </section>
+            </section>
+            """,
+            unsafe_allow_html=True,
+        )
+    with hero_visual:
+        config = showcase_config()
+        render_swarm_player(
+            st, cached_simulation(config), config, height=440, compact=True, autoplay=True
+        )
 
-        <section class="sg-kpi-grid">
-            <article><span>DOĞRULAMA</span><strong>111</strong><small>otomatik test</small></article>
-            <article><span>SİMÜLASYON</span><strong>SIS</strong><small>senkron yayılım</small></article>
-            <article><span>SAVUNMA</span><strong>{snapshot.defense}</strong><small>aktif yaklaşım</small></article>
-            <article><span>YAYIN</span><strong>READY</strong><small>Streamlit Cloud</small></article>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("#### Matematiksel omurga")
+    for column, (label, title, formula, caption) in zip(st.columns(4), THEOREM_CARDS, strict=True):
+        with column.container(border=True):
+            st.markdown(f'<span class="sg-card-title">{label}</span>', unsafe_allow_html=True)
+            st.markdown(f"**{title}**")
+            st.latex(formula)
+            st.caption(caption)
 
-    st.markdown(
-        """
-        <div class="sg-section-heading">
-            <div><span>UÇTAN UCA İŞ AKIŞI</span><h3>Bir senaryodan bilimsel sonuca.</h3></div>
-            <p>Parametreleri tanımla, dinamik ağı çalıştır ve savunma etkisini aynı deney tasarımında ölç.</p>
-        </div>
-        <section class="sg-process-grid">
-            <article><b>01</b><div class="sg-process-icon">⊕</div><h4>Senaryoyu kur</h4><p>Sürü boyutu, hareket, haberleşme menzili, saldırı ve savunma parametrelerini belirle.</p></article>
-            <article><b>02</b><div class="sg-process-icon">◎</div><h4>Ağı izle</h4><p>Enfeksiyon yayılımını, topoloji müdahalelerini ve kritik olayları zaman çizelgesinde takip et.</p></article>
-            <article><b>03</b><div class="sg-process-icon">∿</div><h4>Sonucu kanıtla</h4><p>Monte Carlo koşuları, güven aralıkları ve eşleştirilmiş seed analiziyle yöntemleri karşılaştır.</p></article>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        """
-        <div class="sg-section-heading sg-section-spaced">
-            <div><span>PLATFORM MODÜLLERİ</span><h3>Araştırmanın her aşaması tek yerde.</h3></div>
-        </div>
-        <section class="sg-module-grid">
-            <a href="simulation" target="_self"><span class="sg-module-index">01</span><div class="sg-module-icon">◉</div><h4>Simülasyon Laboratuvarı</h4><p>Canlı ağ, senaryo ayarları, replay ve olay analizi.</p><b>Aç →</b></a>
-            <a href="experiments" target="_self"><span class="sg-module-index">02</span><div class="sg-module-icon">Δ</div><h4>Deney Merkezi</h4><p>Monte Carlo, ablation ve savunma karşılaştırmaları.</p><b>Aç →</b></a>
-            <a href="methodology" target="_self"><span class="sg-module-index">03</span><div class="sg-module-icon">λ</div><h4>Bilimsel Metodoloji</h4><p>Modeller, denklemler, metrikler ve deney sözleşmesi.</p><b>Aç →</b></a>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        f"""
-        <section class="sg-run-banner">
-            <div>
-                <span>OPERASYON ÖZETİ</span>
-                <h3>{snapshot.status.title()}</h3>
-                <p>Demo senaryosu seed 2025 ve GTAD savunmasıyla tek tıkla çalıştırılmaya hazır.</p>
-            </div>
-            <div class="sg-run-stats">
-                <div><span>SON ADIM</span><strong>{snapshot.step}</strong></div>
-                <div><span>ENFEKTE</span><strong>{snapshot.infected}</strong></div>
-                <div><span>GCC</span><strong>{snapshot.connectivity}</strong></div>
-            </div>
-            <a class="sg-button sg-button-primary" href="simulation" target="_self">Laboratuvara git <span>→</span></a>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
+    snapshot = get_home_snapshot(st.session_state)
+    st.markdown("#### Oturum durumu")
+    status = st.columns(4)
+    status[0].metric("Durum", snapshot.status.title())
+    status[1].metric("Son adım", snapshot.step)
+    status[2].metric("Enfekte İHA", snapshot.infected)
+    status[3].metric("En büyük bileşen", snapshot.connectivity)

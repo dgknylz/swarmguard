@@ -5,6 +5,7 @@ import io
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass
+from html import escape
 
 from ...engine import SimulationFrame
 
@@ -236,13 +237,13 @@ def render_event_center(st, frames: list[SimulationFrame]) -> None:
             st.markdown(
                 f"""
                 <article class="sg-event-detail">
-                    <span>{selected.category.upper()} · {selected.severity.upper()}</span>
-                    <h4>{selected.label}</h4>
+                    <span>{escape(selected.category.upper())} · {escape(selected.severity.upper())}</span>
+                    <h4>{escape(selected.label)}</h4>
                     <div><b>Kaynak</b><strong>UAV-{selected.node_id:02d}</strong></div>
                     <div><b>Hedef</b><strong>{target}</strong></div>
                     <div><b>Zaman</b><strong>t = {selected.step}</strong></div>
-                    <div><b>Algoritma</b><strong>{selected.algorithm}</strong></div>
-                    <p>{selected.detail}</p>
+                    <div><b>Algoritma</b><strong>{escape(selected.algorithm)}</strong></div>
+                    <p>{escape(selected.detail)}</p>
                 </article>
                 """,
                 unsafe_allow_html=True,

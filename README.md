@@ -4,6 +4,42 @@ SwarmGuard, dinamik İHA haberleşme ağlarında siber saldırı yayılımını
 incelemek ve adaptif topoloji savunmalarını karşılaştırmak için geliştirilen
 bir araştırma ve görselleştirme platformudur.
 
+## v2.0 · Spektral sürüm
+
+Proje, TÜBİTAK 2204 Matematik alanı için ispatlı bir spektral çerçeveyle
+genişletildi. Her sonuç uygulamanın **Teori** sayfasında ispatıyla birlikte
+verilir ve aktif senaryonun verisiyle sayısal olarak doğrulanır:
+
+| Sonuç | İfade | Doğrulama |
+| --- | --- | --- |
+| Teorem 1 | İki İHA'nın bağlantı olasılığı `F(r) = (πWHr² − ⁴⁄₃(W+H)r³ + ½r⁴)/(W²H²)`; yansımalı hareket düzgün dağılımı korur | Monte Carlo ve simülasyon dereceleri (`test_theory.py`) |
+| Teorem 2 | `E[I(t)] ≤ √(n·I₀)·Π σ(s)`, `σ(s) = 1 − γ + β·λ₁(A(s))`; σ'nın geometrik ortalaması 1'in altındaysa salgın üstel hızla söner | 600 koşuluk Monte Carlo, doğrusal sınır ve faz diyagramı |
+| Önerme 3 | `β|∂I| − β²Σ C(kᵢ,2) ≤ E[yeni enfeksiyon] ≤ β|∂I|` | Adım adım Monte Carlo karşılaştırması |
+| Lemma 4 | Rayleigh sınırları: `λ₁(A−Eᵢⱼ) ≥ λ₁−2uᵢuⱼ`, `λ₁(A₋ᵢ) ≥ λ₁(1−2uᵢ²)`, `λ₂(L+Lᵢⱼ) ≤ λ₂+(vᵢ−vⱼ)²` | Bütün tekil müdahalelerde tam özdeğer hesabı |
+
+Bu sonuçlardan türetilen **Spektral Kalkan** savunması, bilinen enfekteleri
+Perron ağırlığına göre izole eder ve kalan bütçeyle ağı Fiedler kazancına göre
+onarır. `RANDOM_ADDITION` adil kontrol grubudur. Model artık kusurlu tespiti
+(`detection_probability`) ve kalıcı müdahaleyi (`defense_memory`) de
+destekler; varsayılan değerler orijinal deneyleri birebir yeniden üretir
+(`test_original_report_numbers_are_reproduced`).
+
+`DEMO_CONFIG`, 30 seed, ortalama enfeksiyon oranı / ortalama en büyük bileşen:
+
+| Yöntem | Kusursuz tespit | Gerçekçi (q = 0.5, kalıcılık 3, I₀ = 4) |
+| --- | --- | --- |
+| Savunmasız | 0.720 / 0.900 | 0.741 / 0.900 |
+| GTAD | 0.720 / 0.933 | 0.778 / 0.949 |
+| Rastgele ekleme (kontrol) | 0.720 / 0.926 | 0.774 / 0.942 |
+| Merkeziyet karantinası | 0.016 / 0.860 | 0.113 / 0.763 |
+| **Spektral Kalkan** | **0.016 / 0.942** | **0.131 / 0.872** |
+
+Deney ekranı her yöntem için baseline'ı geçtiği seed sayısını, Holm düzeltmeli
+eşleştirilmiş t testi p değerini, etki büyüklüğünü ve ortak rastgele sayıların
+sağladığı varyans azalmasını raporlar. Simülasyon artık tarayıcıda 60 fps
+çalışan bir canvas oynatıcısıyla izlenir (kareler arası enterpolasyon, canlı σ(t)
+göstergesi, Perron ağırlıklı İHA incelemesi).
+
 ## Şu anki durum: 47 / 47 adım tamamlandı
 
 Son ürün kontrolü tamamlandı. Kod GitHub'daki `dgknylz/swarmguard` deposuna

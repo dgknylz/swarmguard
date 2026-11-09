@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 
 from ...config import DefenseStrategy, SimulationConfig
 from ...experiment_exports import manifest_to_json, runs_to_csv, runs_to_parquet
@@ -17,6 +18,8 @@ METHOD_LABELS = {
     "random_rewiring": "Rastgele yeniden bağlantı",
     "centrality_quarantine": "Merkeziyet karantinası",
     "gtad_risk": "GTAD Risk",
+    "spectral_shield": "Spektral Kalkan",
+    "random_addition": "Rastgele ekleme (kontrol)",
     "full": "Tam GTAD",
     "without_connectivity": "Bağlantısallık yok",
     "without_safety": "Güvenlik yok",
@@ -30,6 +33,7 @@ METRIC_LABELS = {
     "mean_largest_component_ratio": "Ortalama büyük bileşen",
     "mean_global_efficiency": "Ortalama ağ verimliliği",
     "mean_algebraic_connectivity": "Ortalama λ₂",
+    "mean_spectral_radius": "Ortalama λ₁ (spektral yarıçap)",
     "total_intervention_cost": "Toplam müdahale maliyeti",
 }
 
@@ -83,18 +87,36 @@ def build_experiment_plan(
 
 
 def summary_rows(result: dict[str, object], metric: str) -> list[dict[str, object]]:
-    return [
-        {
-            "method": str(summary["method"]),
-            "method_label": METHOD_LABELS.get(str(summary["method"]), str(summary["method"])),
-            "run_count": int(summary["run_count"]),
-            "mean": float(summary["metrics"][metric]["mean"]),
-            "std": float(summary["metrics"][metric]["std"]),
-            "ci95_low": float(summary["metrics"][metric]["ci95_low"]),
-            "ci95_high": float(summary["metrics"][metric]["ci95_high"]),
-        }
-        for summary in result["summaries"]
-    ]
+    tests = {
+        str(comparison["method"]): comparison["delta_statistics"].get(metric, {})
+        for comparison in result.get("paired_comparisons", [])
+    }
+
+    def significance(method: str) -> tuple[str, float | None]:
+        statistics = tests.get(method)
+        if not statistics or "wins" not in statistics:
+            return "referans" if method not in tests else "—", None
+        pairs = statistics["wins"] + statistics["losses"] + statistics["ties"]
+        return f"{statistics['wins']}/{pairs}", statistics.get("p_value_holm")
+
+    rows = []
+    for summary in result["summaries"]:
+        method = str(summary["method"])
+        wins, holm = significance(method)
+        rows.append(
+            {
+                "method": method,
+                "method_label": METHOD_LABELS.get(method, method),
+                "run_count": int(summary["run_count"]),
+                "mean": float(summary["metrics"][metric]["mean"]),
+                "std": float(summary["metrics"][metric]["std"]),
+                "ci95_low": float(summary["metrics"][metric]["ci95_low"]),
+                "ci95_high": float(summary["metrics"][metric]["ci95_high"]),
+                "wins": wins,
+                "p_holm": holm,
+            }
+        )
+    return rows
 
 
 def _render_plan(st, config: SimulationConfig, plan: ExperimentPlan | None) -> None:
@@ -103,7 +125,7 @@ def _render_plan(st, config: SimulationConfig, plan: ExperimentPlan | None) -> N
         st.caption("Geçerli seed ve yöntem seçimi yapıldığında koşu planı burada görünecek.")
         return
     method_chips = "".join(
-        f"<span>{METHOD_LABELS.get(method, method)}</span>" for method in plan.methods
+        f"<span>{escape(METHOD_LABELS.get(method, method))}</span>" for method in plan.methods
     )
     st.markdown(
         f"""
@@ -132,10 +154,10 @@ def _render_result(st, result: dict[str, object]) -> None:
     st.markdown(
         f"""
         <section class="sg-result-banner">
-            <div><span>DENEY TAMAMLANDI</span><h3>{EXPERIMENT_LABELS[str(result["kind"])]}</h3></div>
-            <div><small>DENEY KİMLİĞİ</small><strong>{experiment_id}</strong></div>
-            <div><small>KOŞU</small><strong>{result["run_count"]}</strong></div>
-            <div><small>PARMAK İZİ</small><strong>{fingerprint[7:19]}…</strong></div>
+            <div><span>DENEY TAMAMLANDI</span><h3>{escape(EXPERIMENT_LABELS.get(str(result["kind"]), str(result["kind"])))}</h3></div>
+            <div><small>DENEY KİMLİĞİ</small><strong>{escape(experiment_id)}</strong></div>
+            <div><small>KOŞU</small><strong>{escape(str(result["run_count"]))}</strong></div>
+            <div><small>PARMAK İZİ</small><strong>{escape(fingerprint[7:19])}…</strong></div>
         </section>
         """,
         unsafe_allow_html=True,
@@ -184,10 +206,29 @@ def _render_result(st, result: dict[str, object]) -> None:
                 "std": "std. sapma",
                 "ci95_low": "%95 GA alt",
                 "ci95_high": "%95 GA üst",
+                "wins": "baseline'ı geçtiği seed",
+                "p_holm": "Holm p",
             }
-        )[["yöntem", "koşu", "ortalama", "std. sapma", "%95 GA alt", "%95 GA üst"]],
+        )[
+            [
+                "yöntem",
+                "koşu",
+                "ortalama",
+                "std. sapma",
+                "%95 GA alt",
+                "%95 GA üst",
+                "baseline'ı geçtiği seed",
+                "Holm p",
+            ]
+        ],
         width="stretch",
         hide_index=True,
+        column_config={"Holm p": st.column_config.NumberColumn(format="%.2e")},
+    )
+    st.caption(
+        "Holm p: baseline'a göre eşleştirilmiş t testinin Holm–Bonferroni düzeltmeli değeri; "
+        "0.05'in altı anlamlı fark demektir. Seed sayısı, metriğin tercih edilen yönünde "
+        "baseline'ı geçen eşleştirilmiş koşuları gösterir."
     )
 
     csv_column, parquet_column, manifest_column, note_column = st.columns(
@@ -244,7 +285,13 @@ def render_experiment_center(st, config: SimulationConfig) -> None:
             strategies = st.multiselect(
                 "Savunma yöntemleri",
                 options=list(DefenseStrategy),
-                default=[DefenseStrategy.NONE, DefenseStrategy.GTAD_RISK],
+                default=[
+                    DefenseStrategy.NONE,
+                    DefenseStrategy.CENTRALITY_QUARANTINE,
+                    DefenseStrategy.GTAD_RISK,
+                    DefenseStrategy.SPECTRAL_SHIELD,
+                    DefenseStrategy.RANDOM_ADDITION,
+                ],
                 format_func=lambda value: METHOD_LABELS[value.value],
                 disabled=kind == "gtad_ablation",
             )

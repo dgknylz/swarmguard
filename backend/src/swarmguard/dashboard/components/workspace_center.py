@@ -8,11 +8,14 @@ from dataclasses import asdict, dataclass, fields
 
 from ...config import AttackStrategy, DefenseStrategy, SimulationConfig
 from ...engine import SimulationEvent, SimulationFrame
+from ...experiments import SOFTWARE_VERSION
 from ..error_states import render_empty_state
 from ..simulation_session import PlaybackState, PlaybackStatus
 
 WORKSPACE_SCHEMA = "1.0"
 MAX_BUNDLE_BYTES = 25 * 1024 * 1024
+# Fields added after schema 1.0 shipped; older bundles omit them and get the defaults.
+OPTIONAL_CONFIG_FIELDS = frozenset({"detection_probability", "defense_memory"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +65,7 @@ def encode_workspace(session_state: Mapping[str, object]) -> bytes:
     checksum = "sha256:" + hashlib.sha256(_canonical_bytes(payload)).hexdigest()
     envelope = {
         "schema_version": WORKSPACE_SCHEMA,
-        "application": {"name": "swarmguard", "version": "1.1.0"},
+        "application": {"name": "swarmguard", "version": SOFTWARE_VERSION},
         "checksum": checksum,
         "payload": payload,
     }
@@ -73,7 +76,7 @@ def _parse_config(raw: object) -> SimulationConfig:
     if not isinstance(raw, dict):
         raise ValueError("Çalışma alanı senaryosu geçersizdir.")  # noqa: TRY004
     allowed = {field.name for field in fields(SimulationConfig)}
-    if set(raw) != allowed:
+    if not allowed - OPTIONAL_CONFIG_FIELDS <= set(raw) <= allowed:
         raise ValueError("Çalışma alanı senaryosu beklenen alanlarla eşleşmiyor.")
     values = dict(raw)
     try:
@@ -113,6 +116,10 @@ def _parse_frame(raw: object, node_count: int) -> SimulationFrame:
             metrics={str(key): value for key, value in raw["metrics"].items()},
             events=events,
             defense_report=raw.get("defense_report"),
+            detected=tuple(int(node) for node in raw.get("detected", ())),
+            added_edges=tuple((int(a), int(b)) for a, b in raw.get("added_edges", ())),
+            removed_edges=tuple((int(a), int(b)) for a, b in raw.get("removed_edges", ())),
+            quarantined=tuple(int(node) for node in raw.get("quarantined", ())),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("Simülasyon karesi çözümlenemedi.") from exc

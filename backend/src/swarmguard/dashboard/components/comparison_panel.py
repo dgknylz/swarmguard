@@ -2,16 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...experiments import RESULT_METRICS
+from ...experiments import LOWER_IS_BETTER, RESULT_METRICS
 from ..error_states import render_empty_state
 from .experiment_center import EXPERIMENT_LABELS, METHOD_LABELS, METRIC_LABELS
-
-LOWER_IS_BETTER = {
-    "final_infected_ratio",
-    "peak_infected_ratio",
-    "mean_infected_ratio",
-    "total_intervention_cost",
-}
 
 
 @dataclass(frozen=True, slots=True)

@@ -74,7 +74,11 @@ class SimulationSession:
                     if self._stop_requested:
                         break
 
-                await self._publish(self.engine.step())
+                # Steps are CPU bound; a worker thread keeps the API responsive meanwhile.
+                # A frame finished during a pause is held back until the run resumes.
+                frame = await asyncio.to_thread(self.engine.step)
+                await self._pause_event.wait()
+                await self._publish(frame)
 
             self.status = SessionStatus.STOPPED if self._stop_requested else SessionStatus.COMPLETED
         except asyncio.CancelledError:

@@ -13,7 +13,7 @@ from swarmguard.presets import DEMO_CONFIG, SCENARIO_PRESETS, get_scenario_prese
 
 
 def test_page_registry_has_unique_routes_and_one_default() -> None:
-    assert len(PAGE_SPECS) == 6
+    assert len(PAGE_SPECS) == 7
     assert len({spec.path for spec in PAGE_SPECS}) == len(PAGE_SPECS)
     assert sum(spec.default for spec in PAGE_SPECS) == 1
     assert {spec.section for spec in PAGE_SPECS} == {"Platform", "Araştırma"}

@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #050c10; --panel: rgba(8, 20, 26, 0.86); --line: rgba(140, 200, 205, 0.14);
+    --text: #e6f4f2; --muted: #7f989d; --mint: #5eead4; --cyan: #38bdf8; --red: #fb7185;
+    --amber: #fbbf24; --violet: #a78bfa; --dock: 96px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; color: var(--text);
+    font: 12px/1.45 Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; overflow: hidden; }
+  #root { position: relative; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 18px;
+    background: radial-gradient(900px 520px at 78% -12%, rgba(56, 189, 248, 0.09), transparent 62%),
+      radial-gradient(760px 460px at 6% 112%, rgba(94, 234, 212, 0.08), transparent 60%), var(--bg); }
+  #root.compact { --dock: 6px; }
+  #stage { position: absolute; inset: 0 0 var(--dock) 0; cursor: crosshair; outline: none; }
+  canvas { display: block; }
+  .glass { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    backdrop-filter: blur(14px); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
+  #hud { position: absolute; top: 14px; left: 14px; width: 248px; padding: 12px 14px; pointer-events: none; }
+  #hud .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  #hud .time { font: 700 22px/1 "JetBrains Mono", Consolas, monospace; letter-spacing: -0.02em; }
+  #hud .time small { color: var(--muted); font-size: 12px; }
+  .pill { padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted);
+    font-size: 9px; font-weight: 800; letter-spacing: 0.12em; }
+  .pill.live { color: var(--mint); border-color: rgba(94, 234, 212, 0.4); }
+  .label { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.12em; }
+  .metric { margin-top: 10px; }
+  .metric strong { font: 700 15px "JetBrains Mono", Consolas, monospace; }
+  .bar { height: 5px; margin-top: 5px; border-radius: 9px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 9px;
+    background: linear-gradient(90deg, #f43f5e, #fb7185); transition: width 0.25s ease; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .grid2 div { display: flex; flex-direction: column; }
+  .grid2 b { font: 700 13px "JetBrains Mono", Consolas, monospace; }
+  .sigma { margin-top: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line); }
+  .sigma b { font: 700 14px "JetBrains Mono", Consolas, monospace; }
+  .sigma .verdict { margin-top: 3px; font-size: 10.5px; color: var(--muted); }
+  .hot { color: var(--red); } .cool { color: var(--mint); }
+  #defense { margin-top: 9px; color: var(--muted); font-size: 10.5px; }
+  #legend { position: absolute; top: 14px; right: 14px; display: flex; flex-wrap: wrap; justify-content: flex-end;
+    gap: 6px 12px; max-width: 46%; padding: 9px 12px; pointer-events: none; }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; color: #b7cbcb; font-size: 10.5px; white-space: nowrap; }
+  #legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  #legend i.line { width: 16px; height: 0; border-radius: 0; border-top: 2px solid; }
+  #inspector { position: absolute; right: 14px; bottom: calc(var(--dock) + 14px); width: 270px; padding: 14px; display: none; }
+  #inspector.open { display: block; }
+  #inspector h3 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
+  #inspector .badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; }
+  #inspector table { width: 100%; margin-top: 10px; border-collapse: collapse; }
+  #inspector td { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+  #inspector td:last-child { text-align: right; font: 600 11.5px "JetBrains Mono", Consolas, monospace; }
+  #inspector .note { margin-top: 9px; padding: 8px 10px; border-radius: 10px; color: #c9dcdb; font-size: 10.5px;
+    background: rgba(56, 189, 248, 0.07); border: 1px solid rgba(56, 189, 248, 0.18); }
+  #inspector button { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border: 0; border-radius: 8px;
+    color: var(--muted); background: rgba(255, 255, 255, 0.05); cursor: pointer; }
+  #feed { position: absolute; left: 14px; bottom: calc(var(--dock) + 14px); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+  #feed div { padding: 6px 10px; border-radius: 10px; font-size: 11px; background: var(--panel); border: 1px solid var(--line);
+    transition: opacity 0.6s ease, transform 0.6s ease; }
+  #tip { position: absolute; padding: 5px 8px; border-radius: 8px; font-size: 11px; pointer-events: none; display: none;
+    background: rgba(5, 12, 16, 0.92); border: 1px solid var(--line); white-space: nowrap; }
+  #dock { position: absolute; left: 0; right: 0; bottom: 0; height: var(--dock); display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-top: 1px solid var(--line); background: rgba(4, 10, 13, 0.72); }
+  .compact #dock, .compact #legend, .compact #inspector, .compact #feed { display: none !important; }
+  .compact #hud { width: auto; padding: 9px 12px; }
+  .compact #hud .extra { display: none; }
+  #progress { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--mint), var(--cyan)); display: none; }
+  .compact #progress { display: block; }
+  .btn { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border: 1px solid var(--line);
+    border-radius: 12px; color: var(--text); background: rgba(255, 255, 255, 0.04); cursor: pointer; font-size: 14px; }
+  .btn:hover { border-color: rgba(94, 234, 212, 0.45); }
+  .btn.primary { width: 46px; height: 46px; color: #032b26; border: 0; background: linear-gradient(135deg, #5eead4, #38bdf8);
+    box-shadow: 0 8px 22px rgba(56, 189, 248, 0.25); font-size: 16px; }
+  #timeline { flex: 1 1 auto; height: 70px; min-width: 120px; border-radius: 12px; cursor: pointer; }
+  .group { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { padding: 5px 7px; border: 0; color: var(--muted); background: transparent; font: 700 10.5px Inter, sans-serif; cursor: pointer; }
+  .seg button.on { color: #032b26; background: var(--mint); }
+  @media (max-width: 720px) {
+    #hud { width: 200px; } #legend { display: none; } .group.toggles { display: none; } #inspector { width: 230px; }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="stage" tabindex="0"><canvas id="view"></canvas></div>
+  <div id="hud" class="glass">
+    <div class="row"><div class="time" id="time">t 0</div><span class="pill" id="status">HAZIR</span></div>
+    <div class="metric"><div class="row"><span class="label">ENFEKTE İHA</span><strong id="inf">0</strong></div><div class="bar"><i id="infbar"></i></div></div>
+    <div class="grid2 extra">
+      <div><span class="label">EN BÜYÜK BİLEŞEN</span><b id="gcc">–</b></div>
+      <div><span class="label">λ₂ BAĞLANTILILIK</span><b id="l2">–</b></div>
+    </div>
+    <div class="sigma extra" title="σ(t) = 1 − γ + β·λ₁(A(t)). Teorem 2: σ'nın geometrik ortalaması 1'in altındaysa beklenen enfekte sayısı üstel olarak söner.">
+      <div class="row"><span class="label">SPEKTRAL BASKI σ(t)</span><b id="sigma">–</b></div>
+      <div class="verdict" id="verdict">–</div>
+    </div>
+    <div id="defense" class="extra"></div>
+  </div>
+  <div id="legend" class="glass"></div>
+  <div id="inspector" class="glass"><button id="close" title="Kapat">✕</button><div id="inspect"></div></div>
+  <div id="feed"></div>
+  <div id="tip"></div>
+  <div id="progress"></div>
+  <div id="dock">
+    <button class="btn" id="prev" title="Bir kare geri (←)">⏮</button>
+    <button class="btn primary" id="play" title="Oynat / duraklat (boşluk)">▶</button>
+    <button class="btn" id="next" title="Bir kare ileri (→)">⏭</button>
+    <canvas id="timeline"></canvas>
+    <div class="group">
+      <span class="label">HIZ</span>
+      <div class="seg" id="speeds"></div>
+    </div>
+    <div class="group toggles">
+      <span class="label">KATMAN</span>
+      <div class="seg" id="toggles"></div>
+    </div>
+  </div>
+</div>
+<script id="swarm-data" type="application/json">__SWARM_DATA__</script>
+<script>
+(() => {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("swarm-data").textContent);
+  const META = DATA.meta;
+  const FR = DATA.frames;
+  const N = META.n;
+  const LAST = FR.length - 1;
+  const COMPACT = !!META.compact;
+  const $ = (id) => document.getElementById(id);
+  const root = $("root"), stage = $("stage"), canvas = $("view"), ctx = canvas.getContext("2d");
+  const tl = $("timeline"), tctx = tl.getContext("2d");
+  if (COMPACT) root.classList.add("compact");
+
+  const COLOR = { mint: [94, 234, 212], red: [251, 113, 133], amber: [251, 191, 36], cyan: [56, 189, 248],
+    violet: [167, 139, 250], white: [236, 248, 246], edge: [130, 196, 202] };
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+  const pad2 = (i) => String(i).padStart(2, "0");
+  const pct = (x) => "%" + (100 * x).toFixed(1);
+  const BASE_FPS = 2.4;
+  const SPEEDS = [0.5, 1, 2, 4, 8];
+
+  const state = { tau: 0, playing: !!META.autoplay, speed: 1, loop: COMPACT, range: false,
+    labels: N <= 30 && !COMPACT, selected: -1, hover: -1, last: performance.now(), shown: -1, drag: false };
+
+  // Per-frame caches ---------------------------------------------------------------
+  const cache = { inf: [], det: [], quar: [], keys: [], adj: [], perron: new Map() };
+  const setOf = (store, k, list) => store[k] || (store[k] = new Set(list));
+  const infected = (k) => setOf(cache.inf, k, FR[k].i);
+  const detected = (k) => setOf(cache.det, k, FR[k].d);
+  const quarantined = (k) => setOf(cache.quar, k, FR[k].q);
+  function edgeKeys(k) {
+    if (cache.keys[k]) return cache.keys[k];
+    const keys = new Set(), e = FR[k].e;
+    for (let j = 0; j < e.length; j += 2) keys.add(e[j] * N + e[j + 1]);
+    return (cache.keys[k] = keys);
+  }
+  function adjacency(k) {
+    if (cache.adj[k]) return cache.adj[k];
+    const lists = Array.from({ length: N }, () => []), e = FR[k].e;
+    for (let j = 0; j < e.length; j += 2) { lists[e[j]].push(e[j + 1]); lists[e[j + 1]].push(e[j]); }
+    return (cache.adj[k] = lists);
+  }
+  function perron(k) {
+    if (cache.perron.has(k)) return cache.perron.get(k);
+    const lists = adjacency(k);
+    let x = new Float64Array(N).fill(1 / Math.sqrt(N));
+    for (let it = 0; it < 400; it++) {  // power iteration on A + I (same eigenvectors, no oscillation)
+      const y = new Float64Array(N);
+      let norm = 0;
+      for (let i = 0; i < N; i++) { let s = x[i]; for (const j of lists[i]) s += x[j]; y[i] = s; norm += s * s; }
+      norm = Math.sqrt(norm) || 1;
+      let diff = 0;
+      for (let i = 0; i < N; i++) { y[i] /= norm; diff += Math.abs(y[i] - x[i]); }
+      x = y;
+      if (diff < 1e-10) break;
+    }
+    const order = Array.from(x.keys()).sort((a, b) => x[b] - x[a]);
+    const rank = new Int32Array(N);
+    order.forEach((node, index) => (rank[node] = index + 1));
+    const result = { u: x, rank };
+    cache.perron.set(k, result);
+    return result;
+  }
+  const sigmaAt = (k) => 1 - META.gamma + META.beta * FR[k].m[4];
+  const logSigma = [0];
+  for (let k = 1; k <= LAST; k++) logSigma.push(logSigma[k - 1] + Math.log(Math.max(sigmaAt(k), 1e-12)));
+  const geometricSigma = (k) => (k < 1 ? NaN : Math.exp(logSigma[k] / k));
+  const actionCount = FR.map((f) => f.ev.filter((e) => e[0] === "add_edge" || e[0] === "remove_edge" || e[0] === "quarantine_node").length);
+
+  // Layout ---------------------------------------------------------------------------
+  const view = { s: 1, ox: 0, oy: 0, w: 1, h: 1, dpr: 1, r: 6 };
+  function layout() {
+    const box = stage.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, box.width * dpr); canvas.height = Math.max(1, box.height * dpr);
+    canvas.style.width = box.width + "px"; canvas.style.height = box.height + "px";
+    const padX = COMPACT ? 16 : 30, padTop = COMPACT ? 16 : 26, padBottom = COMPACT ? 16 : 26;
+    const s = Math.min((box.width - 2 * padX) / META.w, (box.height - padTop - padBottom) / META.h);
+    Object.assign(view, { s, ox: (box.width - META.w * s) / 2, oy: padTop + (box.height - padTop - padBottom - META.h * s) / 2,
+      w: box.width, h: box.height, dpr, r: Math.max(3, Math.min(COMPACT ? 6.5 : 8.5, 210 / Math.sqrt(N))) });
+    const tb = tl.getBoundingClientRect();
+    tl.width = Math.max(1, tb.width * dpr); tl.height = Math.max(1, tb.height * dpr);
+  }
+  const sx = (x) => view.ox + x * view.s;
+  const sy = (y) => view.oy + (META.h - y) * view.s;
+
+  // Drawing ----------------------------------------------------------------------------
+  const pts = new Float64Array(2 * N);
+  function niceStep(span) {
+    const raw = span / 8, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+    return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+  }
+  function drawArea() {
+    const x0 = sx(0), y0 = sy(META.h), w = META.w * view.s, h = META.h * view.s;
+    ctx.fillStyle = "rgba(9, 24, 30, 0.55)";
+    ctx.fillRect(x0, y0, w, h);
+    const step = niceStep(Math.max(META.w, META.h));
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(140, 200, 205, 0.055)";
+    ctx.beginPath();
+    for (let x = step; x < META.w; x += step) { ctx.moveTo(sx(x), y0); ctx.lineTo(sx(x), y0 + h); }
+    for (let y = step; y < META.h; y += step) { ctx.moveTo(x0, sy(y)); ctx.lineTo(x0 + w, sy(y)); }
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(94, 234, 212, 0.25)";
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+    if (!COMPACT) {
+      ctx.fillStyle = "rgba(127, 152, 157, 0.75)";
+      ctx.font = "600 10px Inter, sans-serif";
+      ctx.fillText(`${META.w} × ${META.h} m · menzil r = ${META.r} m`, x0 + 8, y0 + h - 8);
+      const bar = step * view.s, bx = x0 + w - bar - 10, by = y0 + h - 12;
+      ctx.strokeStyle = "rgba(230, 244, 242, 0.55)";
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bar, by); ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by + 4);
+      ctx.moveTo(bx + bar, by - 4); ctx.lineTo(bx + bar, by + 4); ctx.stroke();
+      ctx.fillText(`${step} m`, bx + bar / 2 - 12, by - 6);
+    }
+  }
+  function strokePairs(list, style, width, alpha, dash) {
+    if (!list.length || alpha <= 0.002) return;
+    ctx.save();
+    ctx.globalAlpha = alpha; ctx.strokeStyle = style; ctx.lineWidth = width;
+    if (dash) ctx.setLineDash(dash);
+    ctx.beginPath();
+    for (let j = 0; j < list.length; j += 2) {
+      const a = list[j], b = list[j + 1];
+      ctx.moveTo(pts[2 * a], pts[2 * a + 1]); ctx.lineTo(pts[2 * b], pts[2 * b + 1]);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawEdges(k, k1, alpha) {
+    const inf = infected(k), now = FR[k].e, next = edgeKeys(k1), current = edgeKeys(k);
+    const keep = [], fadeOut = [], risky = [], riskyOut = [];
+    for (let j = 0; j < now.length; j += 2) {
+      const a = now[j], b = now[j + 1], hot = inf.has(a) !== inf.has(b);
+      const stays = k1 === k || next.has(a * N + b);
+      (hot ? (stays ? risky : riskyOut) : (stays ? keep : fadeOut)).push(a, b);
+    }
+    const fadeIn = [];
+    if (k1 !== k) {
+      const e = FR[k1].e;
+      for (let j = 0; j < e.length; j += 2) if (!current.has(e[j] * N + e[j + 1])) fadeIn.push(e[j], e[j + 1]);
+    }
+    const base = N > 150 ? 0.16 : 0.26;
+    strokePairs(keep, rgba(COLOR.edge, 1), 1, base);
+    strokePairs(fadeOut, rgba(COLOR.edge, 1), 1, base * (1 - alpha));
+    strokePairs(fadeIn, rgba(COLOR.edge, 1), 1, base * alpha);
+    strokePairs(risky, rgba(COLOR.red, 1), 1.4, 0.55);
+    strokePairs(riskyOut, rgba(COLOR.red, 1), 1.4, 0.55 * (1 - alpha));
+    strokePairs(FR[k].x, rgba(COLOR.red, 1), 1.2, 0.5, [3, 5]);
+    ctx.save(); ctx.shadowBlur = 10; ctx.shadowColor = rgba(COLOR.cyan, 0.9);
+    strokePairs(FR[k].a, rgba(COLOR.cyan, 1), 1.8, 0.95, [7, 4]);
+    ctx.restore();
+    if (state.selected >= 0) {
+      const lists = adjacency(k), s = state.selected, pairs = [];
+      for (const j of lists[s]) pairs.push(s, j);
+      strokePairs(pairs, rgba(COLOR.white, 1), 1.6, 0.7);
+    }
+  }
+  function hexagon(x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const t = Math.PI / 6 + (i * Math.PI) / 3; ctx[i ? "lineTo" : "moveTo"](x + r * Math.cos(t), y + r * Math.sin(t)); }
+    ctx.closePath();
+  }
+  function drawNodes(k, k1, alpha, time) {
+    const infA = infected(k), infB = infected(k1), det = detected(k), quar = quarantined(k);
+    const R = view.r, blurred = META.q < 1;
+    const ripples = FR[k].ev;
+    if (alpha < 1 && !COMPACT) {
+      for (const [kind, node] of ripples) {
+        if (kind !== "infected" && kind !== "recovered" && kind !== "initial_infection") continue;
+        const color = kind === "recovered" ? COLOR.mint : COLOR.red;
+        ctx.strokeStyle = rgba(color, 0.65 * (1 - alpha)); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(pts[2 * node], pts[2 * node + 1], R + 4 + 22 * ease(alpha), 0, 2 * Math.PI); ctx.stroke();
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      const x = pts[2 * i], y = pts[2 * i + 1], a = infA.has(i), b = infB.has(i);
+      const t = a === b ? (a ? 1 : 0) : b ? ease(alpha) : 1 - ease(alpha);
+      const color = mix(COLOR.mint, COLOR.red, t);
+      const grow = i === state.selected ? 1.35 : i === state.hover ? 1.2 : 1;
+      if (t > 0.05) {
+        ctx.save();
+        ctx.shadowBlur = (14 + 6 * Math.sin(time * 4 + i)) * t;
+        ctx.shadowColor = rgba(COLOR.red, 0.95);
+        ctx.fillStyle = rgba(color, 1);
+        ctx.beginPath(); ctx.arc(x, y, R * grow, 0, 2 * Math.PI); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.fillStyle = rgba(color, 0.95);
+        ctx.beginPath(); ctx.arc(x, y, R * grow, 0, 2 * Math.PI); ctx.fill();
+        ctx.fillStyle = "rgba(5, 18, 22, 0.55)";
+        ctx.beginPath(); ctx.arc(x, y, R * grow * 0.42, 0, 2 * Math.PI); ctx.fill();
+      }
+      if (blurred && a && !COMPACT) {
+        ctx.save(); ctx.lineWidth = 1.6;
+        if (det.has(i)) { ctx.strokeStyle = rgba(COLOR.white, 0.9); }
+        else { ctx.strokeStyle = rgba(COLOR.violet, 0.95); ctx.setLineDash([3, 3]); }
+        ctx.beginPath(); ctx.arc(x, y, R * grow + 3.5, 0, 2 * Math.PI); ctx.stroke(); ctx.restore();
+      }
+      if (quar.has(i)) {
+        ctx.save(); ctx.strokeStyle = rgba(COLOR.amber, 0.95); ctx.lineWidth = 1.8; ctx.setLineDash([4, 3]);
+        hexagon(x, y, R * grow + 6); ctx.stroke(); ctx.restore();
+      }
+      if (i === state.selected) {
+        ctx.strokeStyle = rgba(COLOR.white, 0.95); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, R * grow + 4, 0, 2 * Math.PI); ctx.stroke();
+      }
+      if (state.labels || i === state.hover || i === state.selected) {
+        ctx.fillStyle = "rgba(220, 236, 234, 0.85)"; ctx.font = "600 9.5px Inter, sans-serif";
+        ctx.fillText(pad2(i), x + R * grow + 3, y - R * grow - 1);
+      }
+    }
+  }
+  function drawRanges(k) {
+    const r = META.r * view.s;
+    ctx.save();
+    if (state.range) {
+      ctx.fillStyle = "rgba(94, 234, 212, 0.022)"; ctx.strokeStyle = "rgba(94, 234, 212, 0.07)";
+      for (let i = 0; i < N; i++) { ctx.beginPath(); ctx.arc(pts[2 * i], pts[2 * i + 1], r, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }
+    }
+    if (state.selected >= 0) {
+      const i = state.selected;
+      ctx.setLineDash([6, 6]); ctx.strokeStyle = "rgba(236, 248, 246, 0.45)"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(pts[2 * i], pts[2 * i + 1], r, 0, 2 * Math.PI); ctx.stroke();
+      ctx.setLineDash([3, 6]); ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+      ctx.beginPath(); ctx.arc(pts[2 * i], pts[2 * i + 1], r * META.multiplier, 0, 2 * Math.PI); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function render(time) {
+    const k = Math.min(LAST, Math.floor(state.tau + 1e-9));
+    const k1 = Math.min(LAST, k + 1);
+    const alpha = k1 === k ? 0 : state.tau - k;
+    const p = FR[k].p, q = FR[k1].p;
+    for (let i = 0; i < N; i++) {
+      pts[2 * i] = sx(p[2 * i] + (q[2 * i] - p[2 * i]) * alpha);
+      pts[2 * i + 1] = sy(p[2 * i + 1] + (q[2 * i + 1] - p[2 * i + 1]) * alpha);
+    }
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.clearRect(0, 0, view.w, view.h);
+    drawArea();
+    drawRanges(k);
+    drawEdges(k, k1, alpha);
+    drawNodes(k, k1, alpha, time);
+    if (k !== state.shown) showFrame(k);
+    drawTimeline();
+    if (COMPACT) $("progress").style.width = (100 * state.tau) / Math.max(1, LAST) + "%";
+  }
+
+  // HUD, feed and inspector ----------------------------------------------------------------
+  const DEFENSE_WORDS = { quarantine_node: "karantina", add_edge: "bağlantı", remove_edge: "kesme" };
+  function showFrame(k) {
+    const previous = state.shown;
+    state.shown = k;
+    const f = FR[k], m = f.m, count = f.i.length;
+    $("time").innerHTML = `t ${f.t} <small>/ ${FR[LAST].t}</small>`;
+    $("inf").textContent = `${count}/${N} · ${pct(m[0])}`;
+    $("infbar").style.width = 100 * m[0] + "%";
+    $("gcc").textContent = pct(m[1]);
+    $("l2").textContent = m[3].toFixed(3);
+    if (k >= 1) {
+      const s = sigmaAt(k), g = geometricSigma(k);
+      $("sigma").innerHTML = `<span class="${s >= 1 ? "hot" : "cool"}">${s.toFixed(3)}</span>`;
+      $("verdict").innerHTML = `λ₁ = ${m[4].toFixed(2)} · σ̄(1…t) = <b class="${g >= 1 ? "hot" : "cool"}">${g.toFixed(3)}</b> → ${
+        g < 1 ? "Teorem 2: üstel sönüm garanti" : "eşik üstü: sönüm garanti değil"}`;
+    } else {
+      $("sigma").textContent = "–";
+      $("verdict").textContent = `λ₁ = ${m[4].toFixed(2)} · saldırı başlangıcı`;
+    }
+    const counts = {};
+    for (const e of f.ev) if (DEFENSE_WORDS[e[0]]) counts[e[0]] = (counts[e[0]] || 0) + 1;
+    const parts = Object.entries(counts).map(([kind, n]) => `${n} ${DEFENSE_WORDS[kind]}`);
+    $("defense").innerHTML = `<span class="label">SAVUNMA</span> ${META.defense}${parts.length ? " · " + parts.join(" · ") : ""}`;
+    if (state.playing && previous !== -1 && k === previous + 1) pushFeed(f);
+    if (state.selected >= 0) inspect(state.selected);
+  }
+  function pushFeed(f) {
+    const feed = $("feed"), words = [];
+    for (const [kind, node, target] of f.ev) {
+      if (kind === "infected") words.push(["#fb7185", `İHA-${pad2(node)} enfekte oldu`]);
+      else if (kind === "recovered") words.push(["#5eead4", `İHA-${pad2(node)} iyileşti`]);
+      else if (kind === "quarantine_node") words.push(["#fbbf24", `İHA-${pad2(node)} karantinaya alındı`]);
+      else if (kind === "add_edge") words.push(["#38bdf8", `Bağlantı ${pad2(node)} ↔ ${pad2(target)} kuruldu`]);
+      else if (kind === "remove_edge") words.push(["#fb7185", `Bağlantı ${pad2(node)} ↔ ${pad2(target)} kesildi`]);
+    }
+    for (const [color, text] of words.slice(0, 3)) {
+      const item = document.createElement("div");
+      item.innerHTML = `<span style="color:${color}">●</span> ${text}`;
+      feed.appendChild(item);
+      setTimeout(() => { item.style.opacity = "0"; item.style.transform = "translateY(6px)"; }, 1800);
+      setTimeout(() => item.remove(), 2500);
+    }
+    while (feed.children.length > 5) feed.firstChild.remove();
+  }
+  function inspect(node) {
+    const k = state.shown < 0 ? 0 : state.shown, f = FR[k], lists = adjacency(k), inf = infected(k);
+    const neighbors = lists[node], infectedNeighbors = neighbors.filter((j) => inf.has(j)).length;
+    const { u, rank } = perron(k), lambda = f.m[4];
+    const isInf = inf.has(node), isQuar = quarantined(k).has(node);
+    const known = detected(k).has(node);
+    const badge = isQuar ? ["#fbbf24", "KARANTİNADA"] : isInf ? ["#fb7185", META.q < 1 ? (known ? "ENFEKTE · TESPİT EDİLDİ" : "ENFEKTE · GİZLİ") : "ENFEKTE"] : ["#5eead4", "SAĞLIKLI"];
+    const recent = [];
+    for (let j = k; j >= Math.max(0, k - 12) && recent.length < 4; j--) {
+      for (const [kind, a, b] of FR[j].ev) if (a === node || b === node) recent.push(`t${FR[j].t} · ${kind.replace("_", " ")}`);
+    }
+    $("inspect").innerHTML = `
+      <span class="label">İHA İNCELEME · t ${f.t}</span>
+      <h3>İHA-${pad2(node)}</h3>
+      <span class="badge" style="color:${badge[0]};border:1px solid ${badge[0]}55;background:${badge[0]}14">${badge[1]}</span>
+      <table>
+        <tr><td>Konum</td><td>${f.p[2 * node].toFixed(0)}, ${f.p[2 * node + 1].toFixed(0)} m</td></tr>
+        <tr><td>Derece</td><td>${neighbors.length}</td></tr>
+        <tr><td>Enfekte komşu</td><td>${infectedNeighbors} / ${neighbors.length}</td></tr>
+        <tr><td>Perron ağırlığı uᵢ</td><td>${u[node].toFixed(3)} · ${rank[node]}. sıra</td></tr>
+      </table>
+      <div class="note">Lemma 4: bu İHA izole edilirse λ₁ en fazla <b>2λ₁uᵢ² = ${(2 * lambda * u[node] * u[node]).toFixed(3)}</b> düşer
+        (λ₁ = ${lambda.toFixed(2)}).</div>
+      <div style="margin-top:8px;color:#7f989d;font-size:10.5px">${recent.length ? recent.join("<br>") : "Son 12 adımda olay yok"}</div>`;
+    $("inspector").classList.add("open");
+  }
+  $("close").onclick = () => { state.selected = -1; $("inspector").classList.remove("open"); };
+
+  function buildLegend() {
+    const items = [["dot", COLOR.mint, "Sağlıklı"], ["dot", COLOR.red, "Enfekte"]];
+    if (META.q < 1) items.push(["ring", COLOR.violet, "Gizli enfekte"]);
+    items.push(["line", COLOR.red, "Bulaş kanalı (S–I)"], ["line", COLOR.cyan, "Savunma bağlantısı"]);
+    if (FR.some((f) => f.x.length)) items.push(["line", COLOR.red, "Kesilen bağlantı"]);
+    if (FR.some((f) => f.q.length)) items.push(["hex", COLOR.amber, "Karantina"]);
+    $("legend").innerHTML = items.map(([kind, c, text]) => {
+      const style = kind === "line" ? `class="line" style="border-color:${rgba(c, 1)}"`
+        : kind === "ring" ? `style="border:2px dashed ${rgba(c, 1)};background:transparent"`
+        : kind === "hex" ? `style="border:2px dashed ${rgba(c, 1)};border-radius:3px;background:transparent"`
+        : `style="background:${rgba(c, 1)};box-shadow:0 0 8px ${rgba(c, 0.6)}"`;
+      return `<span><i ${style}></i>${text}</span>`;
+    }).join("");
+  }
+
+  // Timeline -----------------------------------------------------------------------------------
+  const sigmas = FR.map((_, k) => (k ? sigmaAt(k) : NaN));
+  const finite = sigmas.filter((x) => Number.isFinite(x));
+  const sigmaLow = Math.min(0.9, ...finite), sigmaHigh = Math.max(1.1, ...finite);
+  const maxActions = Math.max(1, ...actionCount);
+  function drawTimeline() {
+    if (COMPACT) return;
+    const dpr = view.dpr, w = tl.width / dpr, h = tl.height / dpr;
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    tctx.clearRect(0, 0, w, h);
+    tctx.fillStyle = "rgba(255, 255, 255, 0.025)"; tctx.fillRect(0, 0, w, h);
+    const X = (k) => (LAST ? (k / LAST) * (w - 2) + 1 : w / 2);
+    const top = 6, bottom = h - 10;
+    tctx.beginPath(); tctx.moveTo(X(0), bottom);
+    for (let k = 0; k <= LAST; k++) tctx.lineTo(X(k), bottom - (bottom - top) * FR[k].m[0]);
+    tctx.lineTo(X(LAST), bottom); tctx.closePath();
+    const grad = tctx.createLinearGradient(0, top, 0, bottom);
+    grad.addColorStop(0, "rgba(251, 113, 133, 0.42)"); grad.addColorStop(1, "rgba(251, 113, 133, 0.02)");
+    tctx.fillStyle = grad; tctx.fill();
+    tctx.strokeStyle = "rgba(251, 113, 133, 0.9)"; tctx.lineWidth = 1.4; tctx.beginPath();
+    for (let k = 0; k <= LAST; k++) tctx[k ? "lineTo" : "moveTo"](X(k), bottom - (bottom - top) * FR[k].m[0]);
+    tctx.stroke();
+    const SY = (s) => bottom - (bottom - top) * ((s - sigmaLow) / (sigmaHigh - sigmaLow));
+    tctx.setLineDash([4, 4]); tctx.strokeStyle = "rgba(251, 191, 36, 0.45)"; tctx.lineWidth = 1;
+    tctx.beginPath(); tctx.moveTo(0, SY(1)); tctx.lineTo(w, SY(1)); tctx.stroke(); tctx.setLineDash([]);
+    tctx.fillStyle = "rgba(251, 191, 36, 0.8)"; tctx.font = "700 9px Inter, sans-serif"; tctx.fillText("σ = 1", 4, SY(1) - 3);
+    tctx.strokeStyle = "rgba(251, 191, 36, 0.95)"; tctx.lineWidth = 1.3; tctx.beginPath();
+    for (let k = 1; k <= LAST; k++) tctx[k > 1 ? "lineTo" : "moveTo"](X(k), SY(sigmas[k]));
+    tctx.stroke();
+    tctx.fillStyle = "rgba(56, 189, 248, 0.85)";
+    for (let k = 0; k <= LAST; k++) if (actionCount[k]) { const bh = 2 + 5 * (actionCount[k] / maxActions); tctx.fillRect(X(k) - 0.6, h - bh, 1.6, bh); }
+    const x = X(state.tau);
+    tctx.fillStyle = "rgba(236, 248, 246, 0.95)"; tctx.fillRect(x - 1, 0, 2, h);
+    tctx.beginPath(); tctx.arc(x, 4, 4, 0, 2 * Math.PI); tctx.fill();
+  }
+  function seekFromEvent(event) {
+    const box = tl.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    state.tau = ratio * LAST;
+  }
+  tl.addEventListener("pointerdown", (e) => { state.drag = true; tl.setPointerCapture(e.pointerId); seekFromEvent(e); });
+  tl.addEventListener("pointermove", (e) => { if (state.drag) seekFromEvent(e); });
+  tl.addEventListener("pointerup", () => { state.drag = false; });
+
+  // Controls ------------------------------------------------------------------------------------
+  function setPlaying(value) {
+    state.playing = value;
+    if (value && state.tau >= LAST) state.tau = 0;
+    $("play").textContent = state.playing ? "❚❚" : "▶";
+    $("status").textContent = state.playing ? "OYNATILIYOR" : state.tau >= LAST ? "TAMAMLANDI" : "DURAKLATILDI";
+    $("status").classList.toggle("live", state.playing);
+  }
+  const step = (delta) => { setPlaying(false); state.tau = Math.min(LAST, Math.max(0, Math.round(state.tau) + delta)); };
+  $("play").onclick = () => setPlaying(!state.playing);
+  $("prev").onclick = () => step(-1);
+  $("next").onclick = () => step(1);
+  $("speeds").innerHTML = SPEEDS.map((s) => `<button data-speed="${s}" class="${s === 1 ? "on" : ""}">${s}×</button>`).join("");
+  $("speeds").onclick = (e) => {
+    const s = Number(e.target.dataset.speed); if (!s) return;
+    state.speed = s;
+    for (const b of $("speeds").children) b.classList.toggle("on", Number(b.dataset.speed) === s);
+  };
+  const TOGGLES = [["range", "Menzil"], ["labels", "Etiket"], ["loop", "Döngü"]];
+  $("toggles").innerHTML = TOGGLES.map(([key, text]) => `<button data-key="${key}" class="${state[key] ? "on" : ""}">${text}</button>`).join("");
+  $("toggles").onclick = (e) => {
+    const key = e.target.dataset.key; if (!key) return;
+    state[key] = !state[key]; e.target.classList.toggle("on", state[key]);
+  };
+  function nodeAt(event) {
+    const box = stage.getBoundingClientRect(), x = event.clientX - box.left, y = event.clientY - box.top;
+    let best = -1, bestDistance = (view.r + 8) ** 2;
+    for (let i = 0; i < N; i++) {
+      const d = (pts[2 * i] - x) ** 2 + (pts[2 * i + 1] - y) ** 2;
+      if (d < bestDistance) { best = i; bestDistance = d; }
+    }
+    return [best, x, y];
+  }
+  stage.addEventListener("pointermove", (e) => {
+    const [node, x, y] = nodeAt(e), tip = $("tip");
+    state.hover = node;
+    if (node < 0 || COMPACT) { tip.style.display = "none"; return; }
+    const k = Math.max(0, state.shown), inf = infected(k).has(node);
+    tip.innerHTML = `İHA-${pad2(node)} · ${inf ? '<span class="hot">enfekte</span>' : '<span class="cool">sağlıklı</span>'} · derece ${adjacency(k)[node].length}`;
+    tip.style.display = "block"; tip.style.left = x + 14 + "px"; tip.style.top = y + 10 + "px";
+  });
+  stage.addEventListener("pointerleave", () => { state.hover = -1; $("tip").style.display = "none"; });
+  stage.addEventListener("click", (e) => {
+    if (COMPACT) { setPlaying(!state.playing); return; }
+    const [node] = nodeAt(e);
+    if (node < 0) { state.selected = -1; $("inspector").classList.remove("open"); return; }
+    state.selected = node; inspect(node);
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") { e.preventDefault(); setPlaying(!state.playing); }
+    else if (e.code === "ArrowRight") step(1);
+    else if (e.code === "ArrowLeft") step(-1);
+    else if (e.code === "Home") step(-LAST);
+    else if (e.code === "End") step(LAST);
+  });
+
+  // Loop -------------------------------------------------------------------------------------
+  function frame(now) {
+    const dt = Math.min(0.25, (now - state.last) / 1000);
+    state.last = now;
+    if (state.playing && !state.drag) {
+      state.tau += dt * BASE_FPS * state.speed;
+      if (state.tau >= LAST) {
+        if (state.loop) state.tau = 0;
+        else { state.tau = LAST; setPlaying(false); }
+      }
+    }
+    render(now / 1000);
+    requestAnimationFrame(frame);
+  }
+  new ResizeObserver(layout).observe(root);
+  layout();
+  buildLegend();
+  setPlaying(state.playing);
+  if (META.notice) {
+    const item = document.createElement("div"); item.textContent = META.notice; $("feed").appendChild(item);
+    setTimeout(() => item.remove(), 6000);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

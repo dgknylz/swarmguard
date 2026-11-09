@@ -68,6 +68,18 @@ DEFENSE_METHODS = (
         "Düğüm riskini izler ve sağlıklı düğümler arasında çok amaçlı bağlantılar ekler.",
         "Menzil, azami derece ve adım bütçesi birlikte uygulanır.",
     ),
+    MethodDefinition(
+        "spectral_shield",
+        "Spektral Kalkan",
+        "Bilinen enfekteleri Perron ağırlığına göre izole eder, kalan bütçeyle ağı onarır.",
+        "Lemma 4: izolasyon λ₁'i en fazla 2λ₁uᵢ² düşürür; bağlantı λ₂'yi en fazla (vᵢ−vⱼ)² artırır.",
+    ),
+    MethodDefinition(
+        "random_addition",
+        "Rastgele ekleme (kontrol)",
+        "GTAD ile aynı bütçe ve kısıtlarla rastgele sağlıklı bağlantı ekler.",
+        "Puanlamalı yöntemlerin kazancını 'bağlantı eklemenin kendisinden' ayırır.",
+    ),
 )
 
 METRIC_DEFINITIONS = (
@@ -103,6 +115,12 @@ METRIC_DEFINITIONS = (
         "Ortalama λ₂",
         "Yüksek",
         "Graf Laplasyeninin ikinci küçük özdeğeri; kopuk ağda sıfır.",
+    ),
+    MetricDefinition(
+        "mean_spectral_radius",
+        "Ortalama λ₁ (spektral yarıçap)",
+        "Düşük",
+        "Komşuluk matrisinin en büyük özdeğeri; Teorem 2'deki yayılım çarpanını belirler.",
     ),
     MetricDefinition(
         "total_intervention_cost",

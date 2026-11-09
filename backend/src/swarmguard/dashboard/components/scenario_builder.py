@@ -18,6 +18,8 @@ DEFENSE_LABELS = {
     DefenseStrategy.RANDOM_REWIRING: "Rastgele yeniden bağlantı",
     DefenseStrategy.CENTRALITY_QUARANTINE: "Merkeziyet karantinası",
     DefenseStrategy.GTAD_RISK: "GTAD risk tabanlı",
+    DefenseStrategy.SPECTRAL_SHIELD: "Spektral Kalkan",
+    DefenseStrategy.RANDOM_ADDITION: "Rastgele ekleme (kontrol)",
 }
 
 
@@ -244,6 +246,26 @@ def render_scenario_builder(st, base: SimulationConfig, *, key_prefix: str) -> B
             value=min(base.defense_max_degree, max(1, int(node_count) - 1)),
             key=f"{key_prefix}-max-degree",
         )
+        detection_col, memory_col = st.columns(2)
+        detection_probability = detection_col.slider(
+            "Tespit olasılığı · q",
+            0.05,
+            1.0,
+            float(base.detection_probability),
+            0.05,
+            key=f"{key_prefix}-detection",
+            help="Savunmanın enfekte bir İHA'yı bir adımda fark etme olasılığı. "
+            "1 = kusursuz tespit (orijinal deneyler).",
+        )
+        defense_memory = memory_col.number_input(
+            "Müdahale kalıcılığı (adım)",
+            min_value=1,
+            max_value=50,
+            value=base.defense_memory,
+            key=f"{key_prefix}-memory",
+            help="Bir karantina, kesme veya bağlantı eyleminin kaç adım yürürlükte kalacağı. "
+            "1 = her adımda yeniden karar (orijinal deneyler).",
+        )
         submitted = st.form_submit_button(
             "Senaryoyu doğrula ve çalıştır",
             type="primary",
@@ -267,6 +289,8 @@ def render_scenario_builder(st, base: SimulationConfig, *, key_prefix: str) -> B
             defense_budget=int(defense_budget),
             defense_range_multiplier=float(defense_range_multiplier),
             defense_max_degree=int(defense_max_degree),
+            detection_probability=float(detection_probability),
+            defense_memory=int(defense_memory),
         )
     except ValueError as error:
         st.error(f"Senaryo doğrulanamadı: {error}")
@@ -287,5 +311,5 @@ def render_scenario_builder(st, base: SimulationConfig, *, key_prefix: str) -> B
     for warning in summary.warnings:
         st.warning(warning, icon="⚠️")
     if submitted:
-        st.success("Senaryo doğrulandı. Simülasyon sonucu Canlı Ağ sekmesine aktarıldı.")
+        st.success("Senaryo doğrulandı ve oynatıcıya yüklendi.")
     return BuilderResult(submitted=submitted, config=config)

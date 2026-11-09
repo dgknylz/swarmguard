@@ -1,6 +1,103 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from math import exp, log
+
+from ..config import SimulationConfig
 from ..engine import SimulationFrame
+
+PLOT_LAYOUT = {
+    "paper_bgcolor": "rgba(0,0,0,0)",
+    "plot_bgcolor": "rgba(0,0,0,0)",
+    "font": {"color": "#93a9ad", "family": "Inter, Segoe UI, sans-serif", "size": 12},
+    "margin": {"l": 10, "r": 10, "t": 30, "b": 10},
+    "hoverlabel": {"bgcolor": "#08151a", "bordercolor": "#24414a", "font": {"color": "#e6f4f2"}},
+    "legend": {"orientation": "h", "y": 1.08, "x": 0, "bgcolor": "rgba(0,0,0,0)"},
+}
+GRID = "rgba(148,197,202,0.08)"
+
+
+@dataclass(frozen=True, slots=True)
+class RunSummary:
+    peak_infected: float
+    final_infected: float
+    mean_component: float
+    geometric_sigma: float
+    intervention_cost: float
+
+
+def spread_factors(frames: list[SimulationFrame], config: SimulationConfig) -> list[float]:
+    """σ(t) = 1 − γ + β·λ₁(A(t)) for the graphs of steps 1…T (Teorem 2)."""
+    return [
+        1 - config.gamma + config.beta * float(frame.metrics.get("spectral_radius", 0.0))
+        for frame in frames[1:]
+    ]
+
+
+def summarize_run(frames: list[SimulationFrame], config: SimulationConfig) -> RunSummary:
+    measured = frames[1:] or frames
+    factors = spread_factors(frames, config)
+    geometric = (
+        exp(sum(log(max(value, 1e-12)) for value in factors) / len(factors)) if factors else 0.0
+    )
+    return RunSummary(
+        peak_infected=max(float(frame.metrics["infected_ratio"]) for frame in measured),
+        final_infected=float(frames[-1].metrics["infected_ratio"]),
+        mean_component=sum(float(frame.metrics["largest_component_ratio"]) for frame in measured)
+        / len(measured),
+        geometric_sigma=geometric,
+        intervention_cost=sum(
+            float(frame.defense_report["intervention_cost"])
+            for frame in measured
+            if frame.defense_report is not None
+        ),
+    )
+
+
+def timeseries_figure(frames: list[SimulationFrame], config: SimulationConfig):
+    from plotly.subplots import make_subplots
+
+    steps = [frame.step for frame in frames]
+    figure = make_subplots(specs=[[{"secondary_y": True}]])
+    figure.add_scatter(
+        x=steps,
+        y=[float(frame.metrics["infected_ratio"]) for frame in frames],
+        name="Enfekte oranı",
+        line={"color": "#fb7185", "width": 2.4},
+        fill="tozeroy",
+        fillcolor="rgba(251,113,133,0.12)",
+    )
+    figure.add_scatter(
+        x=steps,
+        y=[float(frame.metrics["largest_component_ratio"]) for frame in frames],
+        name="En büyük bileşen",
+        line={"color": "#5eead4", "width": 2},
+    )
+    figure.add_scatter(
+        x=steps,
+        y=[float(frame.metrics["global_efficiency"]) for frame in frames],
+        name="Ağ verimliliği",
+        line={"color": "#38bdf8", "width": 1.6, "dash": "dot"},
+    )
+    figure.add_scatter(
+        x=steps[1:],
+        y=spread_factors(frames, config),
+        name="σ(t) spektral baskı",
+        line={"color": "#fbbf24", "width": 1.8},
+        secondary_y=True,
+    )
+    figure.add_hline(
+        y=1,
+        line={"color": "rgba(251,191,36,0.55)", "dash": "dash", "width": 1},
+        secondary_y=True,
+        annotation_text="σ = 1 eşiği",
+        annotation_font_color="#fbbf24",
+    )
+    figure.update_layout(height=380, hovermode="x unified", **PLOT_LAYOUT)
+    figure.update_xaxes(title="Zaman adımı", gridcolor=GRID, zeroline=False)
+    figure.update_yaxes(title="Oran", range=[0, 1.02], gridcolor=GRID, secondary_y=False)
+    figure.update_yaxes(title="σ(t)", showgrid=False, secondary_y=True)
+    return figure
 
 
 def frames_to_records(frames: list[SimulationFrame]) -> list[dict[str, float | int]]:

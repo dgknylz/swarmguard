@@ -7,6 +7,7 @@ from typing import Any
 PAGE_DESCRIPTIONS = {
     "Genel Bakış": "Sürü güvenliği, aktif senaryo ve araştırma araçlarının operasyon özeti.",
     "Simülasyon": "Dinamik İHA ağında saldırı yayılımını ve adaptif savunmayı izle.",
+    "Teori": "Projenin teoremleri, ispatları ve her birinin simülasyonla sayısal doğrulaması.",
     "Çalışma Alanı": "Aktif senaryoyu, simülasyonu ve deney geçmişini kaydet veya geri yükle.",
     "Deneyler": "Monte Carlo koşularını, ablation analizlerini ve savunma sonuçlarını yönet.",
     "Metodoloji": "Model varsayımlarını, algoritmaları ve tekrarlanabilir deney tasarımını incele.",
@@ -78,10 +79,6 @@ def render_topbar(st, page_title: str) -> None:
                 <h1>{page_title}</h1>
                 <p>{description}</p>
             </div>
-            <div class="sg-system-pill">
-                <span class="sg-status-dot sg-status-online"></span>
-                SİSTEM ÇEVRİMİÇİ
-            </div>
         </header>
         """,
         unsafe_allow_html=True,
@@ -92,8 +89,8 @@ def render_footer(st) -> None:
     st.markdown(
         """
         <footer class="sg-footer">
-            <span>SWARMGUARD RESEARCH PLATFORM</span>
-            <span>v1.1.0 · M13 · REPRODUCIBLE BUILD</span>
+            <span>SWARMGUARD · SPEKTRAL SİBER DAYANIKLILIK</span>
+            <span>v2.0.0 · TEKRARLANABİLİR SEED</span>
         </footer>
         """,
         unsafe_allow_html=True,

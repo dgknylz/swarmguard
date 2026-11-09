@@ -145,6 +145,11 @@ Farklar `yöntem - baseline` biçimindedir ve aynı seed sonuçları eşleştiri
 
 def report_to_html(document: ReportDocument, result: dict[str, object]) -> bytes:
     scenario = result["scenario"]
+
+    def value(key: str) -> str:
+        # Experiments can arrive from an imported workspace file, so escape them too.
+        return escape(str(scenario[key]))
+
     summary_rows = "".join(
         "<tr><td>"
         + escape(METHOD_LABELS.get(str(summary["method"]), str(summary["method"])))
@@ -169,7 +174,7 @@ body{{margin:0;background:#071216;color:#dceae8;font:14px Arial,sans-serif;line-
 </style></head><body><main><header><small>SWARMGUARD · ARAŞTIRMA RAPORU</small><h1>{escape(document.title)}</h1><p>{escape(document.author)}</p><code>{escape(document.fingerprint)}</code></header>
 <div class="meta"><div><b>DENEY</b>{escape(document.experiment_id)}</div><div><b>TÜR</b>{escape(EXPERIMENT_LABELS[document.kind])}</div><div><b>KOŞU</b>{document.run_count}</div><div><b>SEED</b>{document.seed_count}</div></div>
 <section><h2>Yönetici Özeti</h2><p>Enfeksiyon kontrolünde en iyi gözlenen yöntem <strong>{escape(METHOD_LABELS.get(document.best_security_method, document.best_security_method))}</strong>; bağlantısallıkta en iyi gözlenen yöntem <strong>{escape(METHOD_LABELS.get(document.best_connectivity_method, document.best_connectivity_method))}</strong>. Referans yöntem: <strong>{escape(METHOD_LABELS.get(document.baseline, document.baseline))}</strong>.</p><blockquote>Bu sıralamalar gözlenen örneklem ortalamalarını gösterir; tek başına istatistiksel anlamlılık iddiası değildir.</blockquote></section>
-<section><h2>Senaryo</h2><ul><li>{scenario["node_count"]} İHA, {scenario["steps"]} adım</li><li>Alan: {scenario["area_width"]} × {scenario["area_height"]} m</li><li>Menzil: {scenario["communication_range"]} m</li><li>β={scenario["beta"]} · γ={scenario["gamma"]}</li><li>Seed: {escape(", ".join(map(str, result["seeds"])))}</li></ul></section>
+<section><h2>Senaryo</h2><ul><li>{value("node_count")} İHA, {value("steps")} adım</li><li>Alan: {value("area_width")} × {value("area_height")} m</li><li>Menzil: {value("communication_range")} m</li><li>β={value("beta")} · γ={value("gamma")}</li><li>Seed: {escape(", ".join(map(str, result["seeds"])))}</li></ul></section>
 <section><h2>Yöntem Ortalamaları</h2><div style="overflow:auto"><table><thead><tr><th>Yöntem</th>{header_cells}</tr></thead><tbody>{summary_rows}</tbody></table></div></section>{note}
 <section><h2>Tekrarlanabilirlik</h2><p>SwarmGuard {escape(str(result["manifest"]["software"]["version"]))} · Şema {escape(str(result["manifest"]["schema_version"]))} · İki taraflı %95 Student-t güven aralığı.</p><code>{escape(document.fingerprint)}</code></section>
 </main></body></html>"""

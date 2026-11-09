@@ -11,6 +11,7 @@ from .pages.experiments import render_experiments_page
 from .pages.methodology import render_methodology_page
 from .pages.overview import render_overview_page
 from .pages.simulation import render_simulation_page
+from .pages.theory import render_theory_page
 from .pages.workspace import render_workspace_page
 
 
@@ -31,6 +32,7 @@ class PageSpec:
 PAGE_SPECS = (
     PageSpec("Genel Bakış", ":material/home:", "overview", "Platform", render_overview_page, True),
     PageSpec("Simülasyon", ":material/hub:", "simulation", "Platform", render_simulation_page),
+    PageSpec("Teori", ":material/functions:", "theory", "Araştırma", render_theory_page),
     PageSpec(
         "Çalışma Alanı",
         ":material/folder_open:",

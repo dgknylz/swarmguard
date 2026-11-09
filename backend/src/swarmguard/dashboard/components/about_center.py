@@ -35,7 +35,7 @@ def calculate_progress(completed: int, total: int) -> float:
 def get_project_profile() -> ProjectProfile:
     return ProjectProfile(
         name="SwarmGuard",
-        version="1.1.0",
+        version="2.0.0",
         completed_steps=47,
         total_steps=47,
         architecture=(

@@ -12,10 +12,13 @@ ActionType = Literal["add_edge", "remove_edge", "quarantine_node"]
 @dataclass(slots=True)
 class DefenseContext:
     graph: nx.Graph
+    # Infected UAVs known to the defender; equals the true infected set only when
+    # detection_probability is 1.
     infected: frozenset[int]
     step: int
     communication_range: float
     positions: tuple[tuple[float, float], ...] = ()
+    quarantined: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +35,7 @@ class DefenseObservation:
     degrees: tuple[tuple[int, int], ...] = ()
     betweenness: tuple[tuple[int, float], ...] = ()
     risk_scores: tuple[tuple[int, float], ...] = ()
+    quarantined: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +92,7 @@ class DefenseAlgorithm(ABC):
     ) -> tuple[tuple[DefenseAction, ...], tuple[DefenseAction, ...]]:
         applied: list[DefenseAction] = []
         rejected: list[DefenseAction] = []
+        isolated = set(context.quarantined)
 
         for action in decision.actions:
             if action.action_type == "add_edge" and action.target is not None:
@@ -95,6 +100,8 @@ class DefenseAlgorithm(ABC):
                     action.source != action.target
                     and action.source in context.graph
                     and action.target in context.graph
+                    and action.source not in isolated
+                    and action.target not in isolated
                     and not context.graph.has_edge(action.source, action.target)
                 ):
                     context.graph.add_edge(action.source, action.target)
@@ -109,6 +116,7 @@ class DefenseAlgorithm(ABC):
                     rejected.append(action)
             elif action.action_type == "quarantine_node" and action.source in context.graph:
                 context.graph.remove_edges_from(list(context.graph.edges(action.source)))
+                isolated.add(action.source)
                 applied.append(action)
             else:
                 rejected.append(action)
