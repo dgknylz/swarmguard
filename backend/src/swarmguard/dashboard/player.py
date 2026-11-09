@@ -95,6 +95,9 @@ def build_player_payload(
     compact: bool = False,
     autoplay: bool = False,
     view: str = "2d",
+    sync: str = "",
+    badge: str = "",
+    leader: bool = False,
 ) -> dict[str, object]:
     stride = player_stride(frames)
     selected = list(frames[::stride])
@@ -120,6 +123,10 @@ def build_player_payload(
             "compact": compact,
             "autoplay": autoplay,
             "view": view,
+            # Players sharing a sync group mirror play, seek, speed, layer and view.
+            "sync": sync,
+            "badge": badge,
+            "leader": leader,
             "notice": (
                 f"Akıcı oynatma için her {stride}. kare gösteriliyor." if stride > 1 else ""
             ),
@@ -152,8 +159,20 @@ def render_swarm_player(
     compact: bool = False,
     autoplay: bool = False,
     view: str = "2d",
+    sync: str = "",
+    badge: str = "",
+    leader: bool = False,
 ) -> None:
     import streamlit.components.v1 as components
 
-    payload = build_player_payload(frames, config, compact=compact, autoplay=autoplay, view=view)
+    payload = build_player_payload(
+        frames,
+        config,
+        compact=compact,
+        autoplay=autoplay,
+        view=view,
+        sync=sync,
+        badge=badge,
+        leader=leader,
+    )
     components.html(player_html(payload), height=height, scrolling=False)

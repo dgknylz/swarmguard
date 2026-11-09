@@ -21,6 +21,7 @@ GRID = "rgba(148,197,202,0.08)"
 class RunSummary:
     peak_infected: float
     final_infected: float
+    mean_infected: float
     mean_component: float
     geometric_sigma: float
     intervention_cost: float
@@ -43,6 +44,8 @@ def summarize_run(frames: list[SimulationFrame], config: SimulationConfig) -> Ru
     return RunSummary(
         peak_infected=max(float(frame.metrics["infected_ratio"]) for frame in measured),
         final_infected=float(frames[-1].metrics["infected_ratio"]),
+        mean_infected=sum(float(frame.metrics["infected_ratio"]) for frame in measured)
+        / len(measured),
         mean_component=sum(float(frame.metrics["largest_component_ratio"]) for frame in measured)
         / len(measured),
         geometric_sigma=geometric,
@@ -97,6 +100,94 @@ def timeseries_figure(frames: list[SimulationFrame], config: SimulationConfig):
     figure.update_xaxes(title="Zaman adımı", gridcolor=GRID, zeroline=False)
     figure.update_yaxes(title="Oran", range=[0, 1.02], gridcolor=GRID, secondary_y=False)
     figure.update_yaxes(title="σ(t)", showgrid=False, secondary_y=True)
+    return figure
+
+
+def duel_figure(runs: list[tuple[str, list[SimulationFrame], str]], config: SimulationConfig):
+    """Infection, largest component and σ(t) of two runs that share a seed."""
+    from plotly.subplots import make_subplots
+
+    figure = make_subplots(
+        rows=1,
+        cols=3,
+        subplot_titles=("Enfekte oranı", "En büyük bileşen", "Spektral baskı σ(t)"),
+        horizontal_spacing=0.06,
+    )
+    for label, frames, color in runs:
+        steps = [frame.step for frame in frames]
+        for column, values in (
+            (1, [float(frame.metrics["infected_ratio"]) for frame in frames]),
+            (2, [float(frame.metrics["largest_component_ratio"]) for frame in frames]),
+        ):
+            figure.add_scatter(
+                x=steps,
+                y=values,
+                name=label,
+                legendgroup=label,
+                showlegend=column == 1,
+                line={"color": color, "width": 2.4},
+                row=1,
+                col=column,
+            )
+        figure.add_scatter(
+            x=steps[1:],
+            y=spread_factors(frames, config),
+            name=label,
+            legendgroup=label,
+            showlegend=False,
+            line={"color": color, "width": 1.8},
+            row=1,
+            col=3,
+        )
+    figure.add_hline(y=1, line={"color": "rgba(251,191,36,0.6)", "dash": "dash"}, row=1, col=3)
+    figure.update_layout(height=330, hovermode="x unified", **PLOT_LAYOUT)
+    figure.update_xaxes(gridcolor=GRID, zeroline=False)
+    figure.update_yaxes(gridcolor=GRID, zeroline=False)
+    return figure
+
+
+def infection_map_figure(frames: list[SimulationFrame]):
+    """UAV × time raster: healthy, quarantined and infected cells; rows ordered by
+    first infection so the cascade reads top to bottom."""
+    import plotly.graph_objects as go
+
+    node_count = len(frames[0].positions)
+    first: dict[int, int] = {}
+    for frame in frames:
+        for node in frame.infected:
+            first.setdefault(node, frame.step)
+    order = sorted(range(node_count), key=lambda node: (first.get(node, 10**9), node))
+    grid = [
+        [
+            1.0 if node in set(frame.infected) else 0.5 if node in set(frame.quarantined) else 0.0
+            for frame in frames
+        ]
+        for node in order
+    ]
+    figure = go.Figure(
+        go.Heatmap(
+            z=grid,
+            x=[frame.step for frame in frames],
+            y=[f"UAV-{node:02d}" for node in order],
+            zmin=0,
+            zmax=1,
+            colorscale=[
+                [0.0, "#0b1e24"],
+                [0.33, "#0b1e24"],
+                [0.34, "#fbbf24"],
+                [0.66, "#fbbf24"],
+                [0.67, "#fb7185"],
+                [1.0, "#fb7185"],
+            ],
+            showscale=False,
+            xgap=1,
+            ygap=1,
+            hovertemplate="%{y} · t=%{x}<extra></extra>",
+        )
+    )
+    figure.update_layout(height=max(320, 14 * node_count + 80), **PLOT_LAYOUT)
+    figure.update_xaxes(title="Zaman adımı", showgrid=False)
+    figure.update_yaxes(autorange="reversed", showgrid=False, tickfont={"size": 9})
     return figure
 
 

@@ -44,6 +44,27 @@ def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
     assert contains_markdown(app, "OLAY VE SALDIRI MERKEZİ")
 
 
+def test_user_journey_tunes_the_live_lab_and_runs_a_duel() -> None:
+    app = AppTest.from_string(
+        "from swarmguard.dashboard.pages.simulation import render_simulation_page\n"
+        "render_simulation_page()",
+        default_timeout=90,
+    ).run()
+    next(item for item in app.slider if item.label == "Bulaş · β").set_value(0.42)
+    app.run()
+
+    assert not app.exception
+    assert app.session_state["config"].beta == 0.42
+    assert app.session_state["config_version"] == 1
+
+    app.segmented_control[0].set_value("duel")
+    app.run()
+
+    assert not app.exception
+    assert any(metric.label == "Tepe enfeksiyon · B" for metric in app.metric)
+    assert {box.label for box in app.selectbox} >= {"A · savunma", "B · savunma"}
+
+
 def test_user_journey_reads_theory_lab() -> None:
     app = AppTest.from_string(
         "from swarmguard.dashboard.pages.theory import render_theory_page\nrender_theory_page()",

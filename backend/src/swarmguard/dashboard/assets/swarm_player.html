@@ -89,8 +89,26 @@
   #view3d:active { cursor: grabbing; }
   .note3d { position: absolute; left: 50%; bottom: calc(var(--dock) + 10px); transform: translateX(-50%); color: var(--muted);
     font-size: 10px; pointer-events: none; display: none; }
-  @media (max-width: 720px) {
-    #hud { width: 200px; } #legend { display: none; } .group.toggles { display: none; } #inspector { width: 230px; }
+  #badge { display: none; margin-bottom: 8px; padding: 3px 9px; border-radius: 999px; font-size: 10px; font-weight: 800;
+    letter-spacing: 0.08em; color: #032b26; background: linear-gradient(135deg, #5eead4, #38bdf8); }
+  #finale { position: absolute; left: 50%; top: 46%; width: min(420px, 86%); padding: 18px 20px; transform: translate(-50%, -50%) scale(0.96);
+    opacity: 0; pointer-events: none; transition: opacity 0.45s ease, transform 0.45s ease; text-align: center; }
+  #finale.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  #finale h2 { margin: 6px 0 12px; font-size: 19px; letter-spacing: -0.01em; }
+  #finale .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; text-align: left; }
+  #finale .stats div { padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+  #finale .stats b { display: block; font: 700 16px "JetBrains Mono", Consolas, monospace; }
+  #finale .verdict { margin: 12px 0 14px; font-size: 11.5px; color: #c9dcdb; }
+  #finale .actions { display: flex; gap: 8px; justify-content: center; }
+  #finale button { padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); color: var(--text); background: rgba(255, 255, 255, 0.05);
+    font: 700 11px Inter, sans-serif; cursor: pointer; }
+  #finale button.primary { border: 0; color: #032b26; background: linear-gradient(135deg, #5eead4, #38bdf8); }
+  @media (max-width: 760px) {
+    /* Half-width players (duel mode): keep play, timeline, math layers and 2D/3D. */
+    #hud { width: 190px; padding: 10px 12px; } #hud .grid2, #defense { display: none; }
+    #legend { display: none; } .group.toggles, .group.speeds { display: none; } #inspector { width: 220px; }
+    #dock { gap: 8px; padding: 8px 10px; } .btn { width: 32px; height: 32px; } .btn.primary { width: 40px; height: 40px; }
+    .seg button { padding: 5px 6px; }
   }
 </style>
 </head>
@@ -98,6 +116,7 @@
 <div id="root">
   <div id="stage" tabindex="0"><canvas id="view"></canvas></div>
   <div id="hud" class="glass">
+    <span id="badge"></span>
     <div class="row"><div class="time" id="time">t 0</div><span class="pill" id="status">HAZIR</span></div>
     <div class="metric"><div class="row"><span class="label">ENFEKTE İHA</span><strong id="inf">0</strong></div><div class="bar"><i id="infbar"></i></div></div>
     <div class="grid2 extra">
@@ -115,6 +134,7 @@
   <div id="inspector" class="glass"><button id="close" title="Kapat">✕</button><div id="inspect"></div></div>
   <div id="feed"></div>
   <div id="tip"></div>
+  <div id="finale" class="glass"></div>
   <div class="note3d" id="note3d">Sürükle: döndür · Tekerlek: yakınlaştır · Tıkla: İHA seç — irtifa yalnızca görseldir, model 2B'dir</div>
   <div id="progress"></div>
   <div id="dock">
@@ -122,7 +142,7 @@
     <button class="btn primary" id="play" title="Oynat / duraklat (boşluk)">▶</button>
     <button class="btn" id="next" title="Bir kare ileri (→)">⏭</button>
     <canvas id="timeline"></canvas>
-    <div class="group">
+    <div class="group speeds">
       <span class="label">HIZ</span>
       <div class="seg" id="speeds"></div>
     </div>
@@ -566,7 +586,7 @@
       setTimeout(() => { item.style.opacity = "0"; item.style.transform = "translateY(6px)"; }, 1800);
       setTimeout(() => item.remove(), 2500);
     }
-    while (feed.children.length > 5) feed.firstChild.remove();
+    while (feed.children.length > (view.w < 760 ? 3 : 5)) feed.firstChild.remove();
   }
   function inspect(node) {
     const k = state.shown < 0 ? 0 : state.shown, f = FR[k], lists = adjacency(k), inf = infected(k);
@@ -665,28 +685,62 @@
     const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
     state.tau = ratio * LAST;
   }
-  tl.addEventListener("pointerdown", (e) => { state.drag = true; tl.setPointerCapture(e.pointerId); seekFromEvent(e); });
-  tl.addEventListener("pointermove", (e) => { if (state.drag) seekFromEvent(e); });
+  tl.addEventListener("pointerdown", (e) => { state.drag = true; tl.setPointerCapture(e.pointerId); seekFromEvent(e); hideFinale(); share("state"); });
+  tl.addEventListener("pointermove", (e) => { if (state.drag) { seekFromEvent(e); share("state"); } });
   tl.addEventListener("pointerup", () => { state.drag = false; });
+
+  // Duel sync: players with the same META.sync mirror each other's controls -------------------
+  const channel = META.sync && "BroadcastChannel" in window ? new BroadcastChannel("swarmguard-" + META.sync) : null;
+  const SELF = Math.random().toString(36).slice(2);
+  function share(kind, extra = {}) {
+    if (channel) channel.postMessage({ from: SELF, kind, progress: state.tau / Math.max(1, LAST), playing: state.playing, speed: state.speed, ...extra });
+  }
 
   // Controls ------------------------------------------------------------------------------------
   function setPlaying(value) {
     state.playing = value;
     if (value && state.tau >= LAST) state.tau = 0;
+    if (value) hideFinale();
     $("play").textContent = state.playing ? "❚❚" : "▶";
     $("status").textContent = state.playing ? "OYNATILIYOR" : state.tau >= LAST ? "TAMAMLANDI" : "DURAKLATILDI";
     $("status").classList.toggle("live", state.playing);
   }
-  const step = (delta) => { setPlaying(false); state.tau = Math.min(LAST, Math.max(0, Math.round(state.tau) + delta)); };
-  $("play").onclick = () => setPlaying(!state.playing);
+  function setSpeed(s) {
+    state.speed = s;
+    for (const b of $("speeds").children) b.classList.toggle("on", Number(b.dataset.speed) === s);
+  }
+  const step = (delta) => { setPlaying(false); hideFinale(); state.tau = Math.min(LAST, Math.max(0, Math.round(state.tau) + delta)); share("state"); };
+  $("play").onclick = () => { setPlaying(!state.playing); share("state"); };
   $("prev").onclick = () => step(-1);
   $("next").onclick = () => step(1);
   $("speeds").innerHTML = SPEEDS.map((s) => `<button data-speed="${s}" class="${s === 1 ? "on" : ""}">${s}×</button>`).join("");
   $("speeds").onclick = (e) => {
     const s = Number(e.target.dataset.speed); if (!s) return;
-    state.speed = s;
-    for (const b of $("speeds").children) b.classList.toggle("on", Number(b.dataset.speed) === s);
+    setSpeed(s); share("state");
   };
+
+  // End-of-run card: the outcome and Teorem 2's verdict for this run.
+  function showFinale() {
+    if (COMPACT) return;
+    const measured = FR.length > 1 ? FR.slice(1) : FR;
+    const peak = Math.max(...measured.map((f) => f.m[0])), last = FR[LAST].m[0];
+    const component = measured.reduce((sum, f) => sum + f.m[1], 0) / measured.length, g = geometricSigma(LAST);
+    $("finale").innerHTML = `<span class="label">SİMÜLASYON TAMAMLANDI${META.badge ? " · " + META.badge : ""}</span>
+      <h2>${META.defense}</h2>
+      <div class="stats">
+        <div><span class="label">TEPE ENFEKSİYON</span><b class="hot">${pct(peak)}</b></div>
+        <div><span class="label">SON ENFEKSİYON</span><b>${pct(last)}</b></div>
+        <div><span class="label">ORT. EN BÜYÜK BİLEŞEN</span><b class="cool">${pct(component)}</b></div>
+        <div><span class="label">σ̄ GEOMETRİK ORTALAMA</span><b class="${g < 1 ? "cool" : "hot"}">${Number.isFinite(g) ? g.toFixed(3) : "–"}</b></div>
+      </div>
+      <div class="verdict">${g < 1 ? "Teorem 2: σ̄ < 1 olduğu için beklenen enfekte sayısı üstel hızla söner."
+        : "σ̄ ≥ 1: ağın spektral baskısı eşiğin üstünde; salgını durdurmak savunmanın işi."}</div>
+      <div class="actions"><button class="primary" id="replay">↻ Tekrar oynat</button><button id="dismiss">Kapat</button></div>`;
+    $("finale").classList.add("show");
+    $("replay").onclick = () => { state.tau = 0; setPlaying(true); share("state"); };
+    $("dismiss").onclick = hideFinale;
+  }
+  function hideFinale() { $("finale").classList.remove("show"); }
   const TOGGLES = [["range", "Menzil"], ["labels", "Etiket"], ["loop", "Döngü"]];
   $("toggles").innerHTML = TOGGLES.map(([key, text]) => `<button data-key="${key}" class="${state[key] ? "on" : ""}">${text}</button>`).join("");
   $("toggles").onclick = (e) => {
@@ -720,7 +774,7 @@
     state.selected = node; inspect(node);
   });
   window.addEventListener("keydown", (e) => {
-    if (e.code === "Space") { e.preventDefault(); setPlaying(!state.playing); }
+    if (e.code === "Space") { e.preventDefault(); setPlaying(!state.playing); share("state"); }
     else if (e.code === "ArrowRight") step(1);
     else if (e.code === "ArrowLeft") step(-1);
     else if (e.code === "Home") step(-LAST);
@@ -731,14 +785,18 @@
   const LAYERS = [["health", "Durum"], ["perron", "Perron"], ["fiedler", "Fiedler"]];
   $("layers").innerHTML = LAYERS.map(([key, text]) =>
     `<button data-layer="${key}" class="${key === "health" ? "on" : ""}" ${key === "fiedler" && !HAS_FIEDLER ? "disabled title='Bu boyutta Fiedler vektörleri gönderilmiyor'" : ""}>${text}</button>`).join("");
-  $("layers").onclick = (e) => {
-    const key = e.target.dataset.layer; if (!key || e.target.disabled) return;
+  function setLayer(key) {
+    if (key === "fiedler" && !HAS_FIEDLER) return;
     state.layer = key; state.shown = -1;
     for (const b of $("layers").children) b.classList.toggle("on", b.dataset.layer === key);
     buildLegend();
+  }
+  $("layers").onclick = (e) => {
+    const key = e.target.dataset.layer; if (!key || e.target.disabled) return;
+    setLayer(key); share("layer", { layer: key });
   };
   $("views").innerHTML = `<button data-view="2d" class="on">2B</button><button data-view="3d">3B</button>`;
-  $("views").onclick = (e) => { if (e.target.dataset.view) setView(e.target.dataset.view); };
+  $("views").onclick = (e) => { const view = e.target.dataset.view; if (view) { setView(view); share("view", { view }); } };
   function notify(text) {
     const item = document.createElement("div"); item.textContent = text; $("feed").appendChild(item);
     setTimeout(() => item.remove(), 4000);
@@ -977,8 +1035,10 @@
       state.tau += dt * BASE_FPS * state.speed;
       if (state.tau >= LAST) {
         if (state.loop) state.tau = 0;
-        else { state.tau = LAST; setPlaying(false); }
+        else { state.tau = LAST; setPlaying(false); showFinale(); }
       }
+      // The leading duel player keeps the other one on the same frame.
+      if (channel && META.leader && now - (state.tick || 0) > 500) { state.tick = now; share("tick"); }
     }
     render(now / 1000, dt);
     requestAnimationFrame(frame);
@@ -988,6 +1048,16 @@
   buildLegend();
   setPlaying(state.playing);
   if (META.view === "3d") setView("3d");
+  if (META.badge) { $("badge").textContent = META.badge; $("badge").style.display = "inline-block"; }
+  if (channel) channel.onmessage = ({ data }) => {
+    if (!data || data.from === SELF) return;
+    const tau = Math.min(LAST, Math.max(0, data.progress * LAST));
+    if (data.kind === "tick") { if (state.playing && Math.abs(tau - state.tau) > 0.12) state.tau = tau; return; }
+    if (data.kind === "layer") { setLayer(data.layer); return; }
+    if (data.kind === "view") { setView(data.view); return; }
+    state.tau = tau; setSpeed(data.speed); setPlaying(data.playing);
+    if (!data.playing) hideFinale();
+  };
   if (META.notice) {
     const item = document.createElement("div"); item.textContent = META.notice; $("feed").appendChild(item);
     setTimeout(() => item.remove(), 6000);
