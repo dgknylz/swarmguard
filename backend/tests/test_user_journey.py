@@ -36,6 +36,7 @@ def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
     assert len(app.session_state["frames"]) == 4
     assert any(metric.label == "Geometrik ortalama σ̄" for metric in app.metric)
 
+    app.segmented_control(key="simulation-analysis").set_value("node").run()
     next(item for item in app.selectbox if item.label == "İHA incele").set_value(3)
     app.run()
 
@@ -43,6 +44,9 @@ def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
     assert app.session_state["selected_uav"] == 3
     assert contains_markdown(app, "UAV-03")
     assert contains_markdown(app, "DÜĞÜM İNCELEME PANELİ")
+
+    app.segmented_control(key="simulation-analysis").set_value("events").run()
+    assert not app.exception
     assert contains_markdown(app, "OLAY VE SALDIRI MERKEZİ")
 
 
@@ -77,8 +81,18 @@ def test_user_journey_reads_theory_lab() -> None:
 
     assert not app.exception
     assert contains_markdown(app, "Dört sonuç, dört sayısal doğrulama.")
-    assert len(app.latex) >= 8
-    assert len(app.get("plotly_chart")) >= 6
+    latex = charts = 0
+    for section in ("theorem-1", "theorem-2", "proposition-3", "lemma-4", "threshold"):
+        app.segmented_control(key="theory-section").set_value(section).run()
+        assert not app.exception
+        latex += len(app.latex)
+        charts += len(app.get("plotly_chart"))
+    assert latex >= 8
+    assert charts >= 8
+
+    app.segmented_control(key="theory-section").set_value("references").run()
+    assert not app.exception
+    assert contains_markdown(app, "KAYNAKLAR VE ÖZGÜNLÜK")
 
 
 def test_user_journey_runs_experiment_compares_and_builds_report() -> None:

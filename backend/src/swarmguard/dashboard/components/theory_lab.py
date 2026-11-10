@@ -33,7 +33,7 @@ from ...theory import (
     spectral_bound,
     spectral_profile,
 )
-from ..charts import GRID, PLOT_LAYOUT
+from ..charts import GRID, PLOT_LAYOUT, render_chart
 from ..performance import cached_simulation
 from .findings_charts import scenario_threshold_figure, tightness_figure
 
@@ -118,12 +118,10 @@ def compute_threshold_sweep(config: SimulationConfig) -> dict[str, object]:
     return threshold_sweep(config, replicates=replicates)
 
 
-def _layout(figure, height: int = 360, **extra):
-    below = {
-        "legend": {"orientation": "h", "y": -0.24, "x": 0, "bgcolor": "rgba(0,0,0,0)"},
-        "margin": {"l": 10, "r": 10, "t": 48, "b": 70},
-    }
-    figure.update_layout(height=height + 40, **{**PLOT_LAYOUT, **below, **extra})
+def _layout(figure, height: int = 360, *, title: str | None = None, **extra):
+    """Theme a figure; the title travels in ``meta`` and is drawn by ``render_chart``."""
+    frame = {"margin": {"l": 10, "r": 10, "t": 28, "b": 10}, "meta": {"title": title}}
+    figure.update_layout(height=height, **{**PLOT_LAYOUT, **frame, **extra})
     figure.update_xaxes(gridcolor=GRID, zeroline=False)
     figure.update_yaxes(gridcolor=GRID, zeroline=False)
     return figure
@@ -258,7 +256,7 @@ katlandığında yine düzgün dağılım elde edilir. Bu yüzden Teorem 1 yaln�
     )
     _layout(figure, title="İHA çiftleri arası mesafe dağılımı F(d)")
     figure.update_xaxes(title="d (m)")
-    left.plotly_chart(figure, width="stretch")
+    render_chart(left, figure)
 
     theory_degree = expected_degree(config.node_count, width, height, radius)
     naive_degree = naive_expected_degree(config.node_count, width, height, radius)
@@ -285,7 +283,7 @@ katlandığında yine düzgün dağılım elde edilir. Bu yüzden Teorem 1 yaln�
     )
     _layout(figure, title="Ortalama derece zaman içinde teorik değerin etrafında salınır")
     figure.update_xaxes(title="Zaman adımı")
-    right.plotly_chart(figure, width="stretch")
+    render_chart(right, figure)
     observed = float(inputs.mean_degrees.mean())
     st.caption(
         f"Gözlenen ortalama {observed:.2f}; Teorem 1 {theory_degree:.2f} "
@@ -374,7 +372,7 @@ $\lambda_1$ değerinden doğrudan hesaplanır ve sonlu zaman için açık bir sa
     _layout(figure, height=420, title="Beklenen enfekte sayısı ve üst sınırlar (log ölçek)")
     figure.update_yaxes(type="log", title="İHA sayısı")
     figure.update_xaxes(title="Zaman adımı")
-    st.plotly_chart(figure, width="stretch")
+    render_chart(st, figure)
 
     figure = go.Figure()
     figure.add_bar(
@@ -402,7 +400,7 @@ $\lambda_1$ değerinden doğrudan hesaplanır ve sonlu zaman için açık bir sa
         title="Her adımın spektral baskısı σ(t) = 1 − γ + β·λ₁(A(t))",
         showlegend=False,
     )
-    st.plotly_chart(figure, width="stretch")
+    render_chart(st, figure)
     violations = int(np.sum(inputs.monte_carlo > inputs.linear_bound + 1e-9))
     st.caption(
         "Simülasyon ortalaması her adımda iki sınırın da altında kalır "
@@ -458,7 +456,7 @@ o anki duruma koşulludur.
     )
     _layout(figure, height=340, title="Adım başına yeni enfeksiyon (Monte Carlo ortalaması)")
     figure.update_xaxes(title="Zaman adımı")
-    st.plotly_chart(figure, width="stretch")
+    render_chart(st, figure)
 
 
 def _render_lemma_4(st, config: SimulationConfig) -> None:
@@ -505,15 +503,25 @@ minimum ise küçük olduğundan eşitsizlikler çıkar. $\blacksquare$
     check = perturbation_check(
         adjacency_from_edges(len(frames[0].positions), frames[frame_index].edges)
     )
+    # Short panel titles fit half a phone screen; the inequality is in the hover text.
     panels = (
-        ("Kenar kesme: Δλ₁ ≥ −2uᵢuⱼ", check.edge_removal, RED),
-        ("İzolasyon: Δλ₁ ≥ −2λ₁uᵢ²", check.node_isolation, AMBER),
-        ("Bağlantı maliyeti: Δλ₁ ≥ 2uᵢuⱼ", check.link_cost, VIOLET),
-        ("Bağlantı kazancı: Δλ₂ ≤ (vᵢ−vⱼ)²", check.link_gain, MINT),
+        ("Kenar kesme", "Δλ₁ ≥ −2uᵢuⱼ", check.edge_removal, RED),
+        ("İzolasyon", "Δλ₁ ≥ −2λ₁uᵢ²", check.node_isolation, AMBER),
+        ("Bağlantı maliyeti", "Δλ₁ ≥ 2uᵢuⱼ", check.link_cost, VIOLET),
+        ("Bağlantı kazancı", "Δλ₂ ≤ (vᵢ−vⱼ)²", check.link_gain, MINT),
     )
-    figure = make_subplots(rows=1, cols=4, subplot_titles=[title for title, _, _ in panels])
+    # A 2 × 2 grid stays readable from a phone to a wide screen; 1 × 4 did not.
+    figure = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=[title for title, _, _, _ in panels],
+        vertical_spacing=0.16,
+        horizontal_spacing=0.1,
+    )
     violations = 0
-    for column, (title, data, color) in enumerate(panels, start=1):
+    for index, (title, bound, data, color) in enumerate(panels):
+        row, column = divmod(index, 2)
+        row, column = row + 1, column + 1
         if len(data.bound):
             low = float(min(data.bound.min(), data.exact.min()))
             high = float(max(data.bound.max(), data.exact.max()))
@@ -523,7 +531,7 @@ minimum ise küçük olduğundan eşitsizlikler çıkar. $\blacksquare$
                 mode="lines",
                 line={"color": "rgba(230,244,242,0.35)", "dash": "dash"},
                 showlegend=False,
-                row=1,
+                row=row,
                 col=column,
             )
             figure.add_scatter(
@@ -532,17 +540,22 @@ minimum ise küçük olduğundan eşitsizlikler çıkar. $\blacksquare$
                 mode="markers",
                 marker={"color": color, "size": 6, "opacity": 0.8},
                 name=title,
+                hovertemplate=f"<b>{title}</b> · {bound}<br>sınır %{{x:.4f}}"
+                "<br>gerçek %{y:.4f}<extra></extra>",
                 showlegend=False,
-                row=1,
+                row=row,
                 col=column,
             )
-        sign = 1 if column < 4 else -1
+        sign = 1 if index < 3 else -1
         violations += int(np.sum(sign * (data.exact - data.bound) < -1e-9))
-    _layout(figure, height=330)
-    figure.update_xaxes(title_text="Lemma 4 sınırı")
-    figure.update_yaxes(title_text="Gerçek değişim", col=1)
-    st.plotly_chart(figure, width="stretch")
-    total = sum(len(data.bound) for _, data, _ in panels)
+    _layout(
+        figure,
+        height=560,
+        title="Her nokta tek bir müdahale: x = Lemma 4 sınırı, y = gerçek değişim",
+    )
+    figure.update_annotations(font_size=12)
+    render_chart(st, figure)
+    total = sum(len(data.bound) for _, _, data, _ in panels)
     st.caption(
         f"{len(check.nodes)} İHA'lık en büyük bileşende {total} müdahale tek tek hesaplandı; "
         f"eşitsizliği ihlal eden müdahale sayısı: {violations}. Noktalar kesikli y = x çizgisinin "
@@ -596,7 +609,7 @@ def _render_phase_diagram(st, inputs: TheoryInputs) -> None:
     _layout(figure, height=440, title="Eğrinin solunda (β < β*) sönüm matematiksel olarak garanti")
     figure.update_xaxes(title="β (bulaş olasılığı)")
     figure.update_yaxes(title="γ (iyileşme olasılığı)")
-    st.plotly_chart(figure, width="stretch")
+    render_chart(st, figure)
     safe = diagram.endemic_level[np.asarray(betas)[None, :] < diagram.threshold_betas[:, None]]
     st.caption(
         f"Eşiğin altındaki {safe.size} hücrede ortalama uzun dönem enfeksiyon "
@@ -636,16 +649,18 @@ def _render_threshold(st, inputs: TheoryInputs) -> None:
         delta_color="normal" if ratio < 1 else "inverse",
     )
     left, right = st.columns(2)
-    left.plotly_chart(
+    render_chart(
+        left,
         scenario_threshold_figure(sweep, SWEEP_MULTIPLIERS, inputs.config.beta, ENDEMIC_LEVEL),
-        width="stretch",
+        title="Bu senaryoda garanti nerede bitiyor, salgın nerede başlıyor?",
     )
     findings = load_findings()
-    right.plotly_chart(tightness_figure(findings), width="stretch")
+    render_chart(right, tightness_figure(findings), title="Yoğun sürülerde eşik daha keskin")
     onsets = [float(item["tightness"]) for item in findings["thresholds"] if item["tightness"]]
     below = max(float(item["level_below_threshold"]) for item in findings["thresholds"])
     st.caption(
-        f"Solda aktif senaryo: {sweep['replicates']} koşu/nokta, {SWEEP_HORIZON} adımın son üçte "
+        f"Solda aktif senaryo (sarı karo senaryonun kendi β değeri): {sweep['replicates']} "
+        f"koşu/nokta, {SWEEP_HORIZON} adımın son üçte "
         f"birindeki ortalama enfekte oranı; noktalı çizgi %{ENDEMIC_LEVEL * 100:.0f} düzeyi. "
         f"Buradaki β* {SWEEP_HORIZON} adımlık hareketten hesaplandığı için üstteki değerden biraz "
         f"farklı olabilir. Sağda yedi hazır senaryo: gözlenen eşik β*'ın ×{min(onsets):.2f}–"
@@ -805,32 +820,36 @@ def _render_references(st) -> None:
                 st.caption(body)
 
 
+def _render_references_section(st, _inputs: TheoryInputs) -> None:
+    _render_references(st)
+
+
+THEORY_SECTIONS = {
+    "theorem-1": ("Teorem 1 · Bağlantı", _render_theorem_1),
+    "theorem-2": ("Teorem 2 · Spektral sınır", _render_theorem_2),
+    "proposition-3": ("Önerme 3 · Bulaş", _render_proposition_3),
+    "lemma-4": ("Lemma 4 · Pertürbasyon", _render_lemma_4),
+    "threshold": ("Eşik sıkılığı", _render_threshold),
+    "phase": ("Faz diyagramı", _render_phase_diagram),
+    "references": ("Kaynaklar", _render_references_section),
+}
+
+
 def render_theory_lab(st, config: SimulationConfig) -> None:
     with st.spinner("Teorem hesapları yapılıyor…"):
         inputs = compute_theory(config)
     _render_intro(st, inputs)
-    sections = st.tabs(
-        [
-            "Teorem 1 · Bağlantı",
-            "Teorem 2 · Spektral sınır",
-            "Önerme 3 · Bulaş",
-            "Lemma 4 · Pertürbasyon",
-            "Eşik sıkılığı",
-            "Faz diyagramı",
-            "Kaynaklar",
-        ]
+    # A selector instead of st.tabs: hidden tabs drew their Plotly charts at a fixed 700 px
+    # and kept that width once shown, which cut them off on phones. Only the open section
+    # is computed and drawn, so the page is also lighter.
+    section = st.segmented_control(
+        "Teori bölümü",
+        options=list(THEORY_SECTIONS),
+        default="theorem-1",
+        format_func=lambda key: THEORY_SECTIONS[key][0],
+        key="theory-section",
+        label_visibility="collapsed",
+        width="stretch",
     )
-    with sections[0]:
-        _render_theorem_1(st, inputs)
-    with sections[1]:
-        _render_theorem_2(st, inputs)
-    with sections[2]:
-        _render_proposition_3(st, inputs)
-    with sections[3]:
-        _render_lemma_4(st, config)
-    with sections[4]:
-        _render_threshold(st, inputs)
-    with sections[5]:
-        _render_phase_diagram(st, inputs)
-    with sections[6]:
-        _render_references(st)
+    renderer = THEORY_SECTIONS[section or "theorem-1"][1]
+    renderer(st, config if renderer is _render_lemma_4 else inputs)

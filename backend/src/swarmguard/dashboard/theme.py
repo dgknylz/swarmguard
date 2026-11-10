@@ -20,7 +20,8 @@ THEME_CSS = """
         background: transparent;
     }
 
-    [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none; }
+    /* On a phone Streamlit moves the top navigation into the sidebar: it must stay reachable. */
+    [data-testid="stSidebar"] { background: #08151a; border-right: 1px solid var(--sg-border); }
     [data-testid="stTopNav"] { border-bottom: 1px solid var(--sg-border); }
     [data-testid="stTopNav"] a { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.025em; }
 
@@ -560,7 +561,10 @@ REFRESH_CSS = """
         padding: 0.85rem 1rem; border: 1px solid rgba(148, 197, 202, 0.12); border-radius: 0.9rem;
         background: linear-gradient(180deg, rgba(16, 38, 44, 0.55), rgba(9, 22, 27, 0.55));
     }
-    [data-testid="stMetricValue"] { font-family: "JetBrains Mono", Consolas, monospace; letter-spacing: -0.02em; }
+    [data-testid="stMetricValue"] { font-family: "JetBrains Mono", Consolas, monospace; letter-spacing: -0.02em;
+        font-size: clamp(1.25rem, 2.1vw, 2.25rem); }
+    /* A value never loses its end to an ellipsis: it wraps instead. */
+    [data-testid="stMetricValue"] > div { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.15; }
     [data-testid="stExpander"] details { border-radius: 0.9rem; border-color: rgba(148, 197, 202, 0.14); }
     iframe[title="st.iframe"], [data-testid="stIFrame"] { border-radius: 18px; }
     .katex { color: #e6f4f2; font-size: 1.12em; }
@@ -592,6 +596,16 @@ REFRESH_CSS = """
     .sg-theorem-head p { margin: 0; color: #8fa6aa; }
     .sg-card-title { color: #fbbf24; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; }
     @media (max-width: 900px) { .sg-theory-hero { grid-template-columns: 1fr; } }
+    .sg-chart-head { margin-bottom: -0.6rem; }
+    .sg-chart-title { color: #e6f4f2; font-size: 0.95rem; font-weight: 700; line-height: 1.35; }
+    .sg-chart-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-top: 0.35rem;
+        color: #b7cbcb; font-size: 0.78rem; }
+    .sg-chart-legend span { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+    .sg-chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+    .sg-chart-legend i.line { width: 18px; height: 0; border-radius: 0; }
+    .sg-chart-legend i.box { border-radius: 2px; }
+    .sg-chart-legend i.diamond { width: 9px; height: 9px; border-radius: 1px; transform: rotate(45deg); }
+    .sg-chart-legend b { font-size: 0.95rem; line-height: 1; }
     .sg-findings-head { margin: 1.6rem 0 0.6rem; }
     .sg-findings-head p { margin: 0; color: #8fa6aa; }
     .sg-findings-head code { color: #5eead4; background: rgba(94, 234, 212, 0.08); }

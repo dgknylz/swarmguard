@@ -114,6 +114,18 @@
     #dock { gap: 8px; padding: 8px 10px; } .btn { width: 32px; height: 32px; } .btn.primary { width: 40px; height: 40px; }
     .seg button { padding: 5px 6px; }
   }
+  @media (max-width: 520px) {
+    /* Phones: the dock wraps into two rows (transport + timeline, then the switches)
+       instead of pushing the 2B/3B switch out of the frame. */
+    #root { --dock: 112px; }
+    #dock { flex-wrap: wrap; align-content: center; row-gap: 8px; padding: 8px 10px; }
+    #timeline { height: 44px; min-width: 0; flex-basis: 0; }
+    .group { flex-direction: row; align-items: center; gap: 6px; } .group .label { display: none; }
+    #hud { width: 168px; padding: 9px 11px; } #hud .sigma { display: none; }
+    #hud .time { font-size: 19px; } .metric strong { font-size: 13px; }
+    #inspector { left: 10px; right: 10px; width: auto; }
+    #finale { width: 92%; padding: 14px; }
+  }
 </style>
 </head>
 <body>

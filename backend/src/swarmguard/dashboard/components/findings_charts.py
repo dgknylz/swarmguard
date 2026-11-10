@@ -1,9 +1,13 @@
-"""Charts of the project's headline findings (data: ``swarmguard.findings``)."""
+"""Charts of the project's headline findings (data: ``swarmguard.findings``).
+
+Titles and legends are left to ``charts.render_chart``, which draws them as HTML so that
+they wrap on narrow screens; every label inside a plot is short enough for a phone.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from math import log10
+from math import log10, sqrt
 
 from ..charts import GRID, PLOT_LAYOUT
 from .experiment_center import METHOD_COLORS, METHOD_LABELS
@@ -17,18 +21,12 @@ INK, MUTED, MINT, AMBER, RED, ORANGE = (
     "#fb923c",
 )
 SAFE_FILL = "rgba(94,234,212,0.07)"
+STEM = {"color": "rgba(147,169,173,0.5)", "width": 3}
 RING = {"color": "#061014", "width": 2}
-LEGEND_BELOW = {
-    "orientation": "h",
-    "yanchor": "top",
-    "y": -0.24,
-    "x": 0,
-    "bgcolor": "rgba(0,0,0,0)",
-}
 
 
 def _layout(figure, height: int, **extra):
-    base = {**PLOT_LAYOUT, "margin": {"l": 10, "r": 10, "t": 44, "b": 10}}
+    base = {**PLOT_LAYOUT, "margin": {"l": 10, "r": 10, "t": 30, "b": 10}}
     figure.update_layout(height=height, **{**base, **extra})
     figure.update_xaxes(gridcolor=GRID, zeroline=False)
     figure.update_yaxes(gridcolor=GRID, zeroline=False)
@@ -38,7 +36,7 @@ def _layout(figure, height: int, **extra):
 def _ratio_axis(figure, multipliers: Sequence[float]) -> None:
     figure.update_xaxes(
         type="log",
-        title="β / β*  (Teorem 2 eşiğine oran)",
+        title="β / β*",
         tickvals=[0.5, 1, 2, 4, 8],
         ticktext=["0.5", "1", "2", "4", "8"],
         range=[log10(multipliers[0]), log10(multipliers[-1])],
@@ -46,27 +44,41 @@ def _ratio_axis(figure, multipliers: Sequence[float]) -> None:
     figure.update_yaxes(title="Uzun dönem enfekte oranı", tickformat=".0%", rangemode="tozero")
 
 
-def _note(figure, text: str, x: float, y: float, color: str = INK) -> None:
-    """A left-aligned label at data x (log axis) and paper y."""
+def _top_label(figure, text: str, x: float, color: str, *, anchor: str = "left", log: bool = True):
+    """A short label sitting on the top edge of the plot at data position x."""
     figure.add_annotation(
-        x=log10(x),
-        y=y,
+        x=log10(x) if log else x,
+        y=1.0,
         yref="paper",
         text=text,
         showarrow=False,
-        align="left",
         font={"color": color, "size": 11},
-        xanchor="left",
-        xshift=6,
-        yanchor="top",
+        xanchor=anchor,
+        xshift=4 if anchor == "left" else 0,
+        yanchor="bottom",
+    )
+
+
+def _row_label(figure, text: str, row: float, *, side: str = "left") -> None:
+    """A label above a horizontal row, so the plot keeps the full width on a phone."""
+    figure.add_annotation(
+        x=0.0 if side == "left" else 1.0,
+        xref="paper",
+        y=row,
+        text=text,
+        showarrow=False,
+        font={"color": INK if side == "left" else "#b7cbcb", "size": 11},
+        xanchor=side,
+        yanchor="bottom",
+        yshift=9,
     )
 
 
 def _guarantee_band(figure, first: float) -> None:
     figure.add_vrect(x0=first, x1=1, fillcolor=SAFE_FILL, line_width=0, layer="below")
     figure.add_vline(x=1, line={"color": AMBER, "width": 2})
-    _note(figure, "<b>β*</b>", 1, 1.0, AMBER)
-    _note(figure, "Teorem 2:<br>sönüm garantili", first, 1.0, MINT)
+    _top_label(figure, "garantili", sqrt(first), MINT, anchor="center")
+    _top_label(figure, "<b>β*</b>", 1, AMBER)
 
 
 def scenario_threshold_figure(
@@ -93,39 +105,25 @@ def scenario_threshold_figure(
     tightness = sweep.get("tightness")
     if tightness:
         figure.add_vline(x=tightness, line={"color": RED, "width": 1.5, "dash": "dash"})
-        _note(figure, f"gözlenen eşik<br>×{float(tightness):.2f}", float(tightness), 0.7)
+        _top_label(figure, f"gözlenen ×{float(tightness):.2f}", float(tightness), INK)
     ratio = beta / threshold if threshold else float("inf")
     if multipliers[0] <= ratio <= multipliers[-1]:
         nearest = min(range(len(levels)), key=lambda index: abs(multipliers[index] - ratio))
         figure.add_scatter(
             x=[ratio],
             y=[levels[nearest]],
-            mode="markers+text",
+            mode="markers",
             marker={"symbol": "diamond", "size": 13, "color": AMBER, "line": RING},
-            text=[f"senaryo β (×{ratio:.2f})"],
-            textposition="top center",
-            textfont={"color": INK, "size": 11},
-            hovertemplate=f"Senaryonun β değeri {beta:.3f}<extra></extra>",
+            hovertemplate=f"Senaryonun β değeri {beta:.3f} (×{ratio:.2f})<extra></extra>",
             showlegend=False,
         )
-    else:
-        figure.add_annotation(
-            x=1.0,
-            xref="paper",
-            y=0.1,
-            yref="paper",
-            text=f"senaryo β = ×{ratio:.1f} →",
-            showarrow=False,
-            font={"color": INK, "size": 11},
-            xanchor="right",
-        )
-    _layout(figure, 400, title="Bu senaryoda garanti nerede bitiyor, salgın nerede başlıyor?")
+    _layout(figure, 380)
     _ratio_axis(figure, multipliers)
     return figure
 
 
 def threshold_collapse_figure(findings: Mapping[str, object], highlight: str | None = None):
-    """Every scenario on the β/β* axis: the curves leave zero right after one."""
+    """Every scenario on the β/β* axis: the curves leave zero to the right of one."""
     import plotly.graph_objects as go
 
     multipliers = list(findings["sweep_multipliers"])
@@ -135,12 +133,7 @@ def threshold_collapse_figure(findings: Mapping[str, object], highlight: str | N
         figure.add_vrect(
             x0=min(onsets), x1=max(onsets), fillcolor="rgba(251,113,133,0.10)", line_width=0
         )
-        _note(
-            figure,
-            f"gözlenen eşikler<br>×{min(onsets):.2f} – ×{max(onsets):.2f}",
-            min(onsets),
-            1.0,
-        )
+        _top_label(figure, f"gözlenen ×{min(onsets):.1f}–×{max(onsets):.1f}", min(onsets), INK)
     for item in findings["thresholds"]:
         chosen = item["slug"] == highlight
         figure.add_scatter(
@@ -160,7 +153,7 @@ def threshold_collapse_figure(findings: Mapping[str, object], highlight: str | N
             showlegend=False,
         )
     _guarantee_band(figure, multipliers[0])
-    _layout(figure, 380, title=f"{len(findings['thresholds'])} farklı sürü, tek eksen")
+    _layout(figure, 360)
     _ratio_axis(figure, multipliers)
     return figure
 
@@ -170,17 +163,21 @@ def ordering_figure(findings: Mapping[str, object]):
     import plotly.graph_objects as go
 
     rows = list(findings["ordering"])[::-1]
-    labels = [row["label"] for row in rows]
+    positions = list(range(len(rows)))
     figure = go.Figure()
-    for row in rows:
+    for position, row in zip(positions, rows, strict=True):
         figure.add_scatter(
             x=[row["shield"]["mean"], row["control"]["mean"]],
-            y=[row["label"], row["label"]],
+            y=[position, position],
             mode="lines",
-            line={"color": "rgba(147,169,173,0.5)", "width": 3},
+            line=STEM,
             hoverinfo="skip",
             showlegend=False,
         )
+        same = row["wins"] == 0 and row["losses"] == 0
+        difference = f"{row['delta']['mean'] * 100:+.1f} puan · {row['wins']}–{row['losses']}"
+        _row_label(figure, row["label"], position)
+        _row_label(figure, "aynı sonuç" if same else difference, position, side="right")
     series = (
         ("control", "Rastgele sıra (kontrol)", ORANGE, "diamond"),
         ("shield", "Perron sırası (Spektral Kalkan)", MINT, "circle"),
@@ -188,45 +185,23 @@ def ordering_figure(findings: Mapping[str, object]):
     for key, name, color, symbol in series:
         figure.add_scatter(
             x=[row[key]["mean"] for row in rows],
-            y=labels,
+            y=positions,
             mode="markers",
             name=name,
             marker={"color": color, "size": 14, "symbol": symbol, "line": RING},
-            customdata=[[row[key]["ci95_low"], row[key]["ci95_high"]] for row in rows],
+            customdata=[
+                [row["label"], row[key]["ci95_low"], row[key]["ci95_high"]] for row in rows
+            ],
             hovertemplate=(
-                f"{name}<br>ortalama %{{x:.1%}}"
-                "<br>%95 GA %{customdata[0]:.1%} – %{customdata[1]:.1%}<extra></extra>"
+                f"%{{customdata[0]}}<br>{name}<br>ortalama %{{x:.1%}}"
+                "<br>%95 GA %{customdata[1]:.1%} – %{customdata[2]:.1%}<extra></extra>"
             ),
         )
-    for row in rows:
-        same = row["wins"] == 0 and row["losses"] == 0
-        difference = (
-            f"Δ {row['delta']['mean'] * 100:+.1f} puan · {row['wins']}–{row['losses']} seed"
-        )
-        figure.add_annotation(
-            x=1.0,
-            xref="paper",
-            y=row["label"],
-            text="aynı sonuç" if same else difference,
-            showarrow=False,
-            xanchor="right",
-            yshift=0,
-            font={"color": INK, "size": 11},
-        )
-    _layout(
-        figure,
-        380,
-        title="Aynı savunma, yalnızca karantina sırası farklı",
-        legend=LEGEND_BELOW,
-        margin={"l": 10, "r": 10, "t": 44, "b": 84},
-    )
+    _layout(figure, 90 + 62 * len(rows))
     figure.update_xaxes(
-        title="Ortalama enfeksiyon oranı",
-        tickformat=".0%",
-        range=[-0.03, 1.18],
-        tickvals=[0, 0.2, 0.4, 0.6, 0.8],
+        title="Ortalama enfeksiyon oranı", tickformat=".0%", range=[-0.04, 1.0], dtick=0.2
     )
-    figure.update_yaxes(showgrid=False)
+    figure.update_yaxes(visible=False, range=[-0.5, len(rows) - 0.25])
     return figure
 
 
@@ -252,7 +227,7 @@ def tradeoff_figure(findings: Mapping[str, object]):
         cols=len(tables),
         shared_yaxes=True,
         horizontal_spacing=0.06,
-        subplot_titles=[table["label"] for table in tables],
+        subplot_titles=[table["label"].split(" · ")[0] for table in tables],
     )
     for column, table in enumerate(tables, start=1):
         # Spektral Kalkan is drawn last so its star stays on top of coinciding points.
@@ -264,7 +239,6 @@ def tradeoff_figure(findings: Mapping[str, object]):
                 y=[row["connectivity"]["mean"]],
                 mode="markers",
                 name=METHOD_LABELS[method],
-                legendgroup=method,
                 showlegend=column == 1,
                 marker={
                     "color": METHOD_COLORS[method],
@@ -275,8 +249,9 @@ def tradeoff_figure(findings: Mapping[str, object]):
                 error_x=_whiskers(row["infection"]),
                 error_y=_whiskers(row["connectivity"]),
                 hovertemplate=(
-                    f"<b>{METHOD_LABELS[method]}</b><br>enfeksiyon %{{x:.1%}}"
-                    f"<br>en büyük bileşen %{{y:.1%}}<br>maliyet {row['cost']:.1f}<extra></extra>"
+                    f"<b>{METHOD_LABELS[method]}</b><br>{table['label']}"
+                    "<br>enfeksiyon %{x:.1%}<br>en büyük bileşen %{y:.1%}"
+                    f"<br>maliyet {row['cost']:.1f}<extra></extra>"
                 ),
                 row=1,
                 col=column,
@@ -286,7 +261,7 @@ def tradeoff_figure(findings: Mapping[str, object]):
         xref="paper",
         y=0.0,
         yref="paper",
-        text="↖ sol üst: hem güvenli hem bağlı",
+        text="↖ daha iyi",
         showarrow=False,
         font={"color": MUTED, "size": 11},
         xanchor="left",
@@ -294,11 +269,11 @@ def tradeoff_figure(findings: Mapping[str, object]):
         xshift=8,
         yshift=6,
     )
-    _layout(figure, 440, legend=LEGEND_BELOW, margin={"l": 10, "r": 10, "t": 44, "b": 110})
+    _layout(figure, 380)
     figure.update_annotations(font_size=12)
-    figure.update_xaxes(title="Ortalama enfeksiyon oranı", tickformat=".0%", range=[-0.05, 1.0])
+    figure.update_xaxes(title="Enfeksiyon oranı", tickformat=".0%", range=[-0.06, 1.0], dtick=0.5)
     figure.update_yaxes(tickformat=".0%")
-    figure.update_yaxes(title="Ortalama en büyük bileşen", col=1)
+    figure.update_yaxes(title="En büyük bileşen", col=1)
     return figure
 
 
@@ -308,25 +283,25 @@ def tightness_figure(findings: Mapping[str, object]):
 
     items = [item for item in findings["thresholds"] if item["tightness"]]
     ordered = sorted(items, key=lambda item: -item["mean_spectral_radius"])
-    labels = [
-        f"{item['title'].split(' · ')[0]} · λ₁ {item['mean_spectral_radius']:.1f}"
-        for item in ordered
-    ]
+    positions = list(range(len(ordered)))
+    upper = max(item["tightness"] for item in ordered) + 0.7
     figure = go.Figure()
     figure.add_vrect(x0=0, x1=1, fillcolor=SAFE_FILL, line_width=0, layer="below")
     figure.add_vline(x=1, line={"color": AMBER, "width": 2})
-    for label, item in zip(labels, ordered, strict=True):
+    for position, item in zip(positions, ordered, strict=True):
         figure.add_scatter(
             x=[1, item["tightness"]],
-            y=[label, label],
+            y=[position, position],
             mode="lines",
-            line={"color": "rgba(147,169,173,0.5)", "width": 3},
+            line=STEM,
             hoverinfo="skip",
             showlegend=False,
         )
+        name = item["title"].split(" · ")[0]
+        _row_label(figure, f"{name} · λ₁ {item['mean_spectral_radius']:.1f}", position)
     figure.add_scatter(
         x=[item["tightness"] for item in ordered],
-        y=labels,
+        y=positions,
         mode="markers+text",
         marker={"color": MINT, "size": 13, "line": RING},
         text=[f"×{item['tightness']:.2f}" for item in ordered],
@@ -344,28 +319,9 @@ def tightness_figure(findings: Mapping[str, object]):
         showlegend=False,
         cliponaxis=False,
     )
-    figure.add_annotation(
-        x=1,
-        y=1.0,
-        yref="paper",
-        text="<b>β*</b>",
-        showarrow=False,
-        font={"color": AMBER, "size": 11},
-        xanchor="left",
-        xshift=5,
-        yanchor="bottom",
-    )
-    figure.add_annotation(
-        x=0.5,
-        y=1.0,
-        yref="paper",
-        text="sönüm garantili",
-        showarrow=False,
-        font={"color": MINT, "size": 11},
-        yanchor="bottom",
-    )
-    _layout(figure, 400, title="Yoğun sürülerde eşik daha keskin")
-    upper = max(item["tightness"] for item in ordered)
-    figure.update_xaxes(title="Gözlenen eşik / β*", range=[0, upper + 0.6], ticksuffix="×")
-    figure.update_yaxes(showgrid=False)
+    _top_label(figure, "garantili", 0.5, MINT, anchor="center", log=False)
+    _top_label(figure, "<b>β*</b>", 1, AMBER, log=False)
+    _layout(figure, 70 + 46 * len(ordered))
+    figure.update_xaxes(title="Gözlenen eşik / β*", range=[0, upper], ticksuffix="×", dtick=1)
+    figure.update_yaxes(visible=False, range=[-0.5, len(ordered) - 0.2])
     return figure

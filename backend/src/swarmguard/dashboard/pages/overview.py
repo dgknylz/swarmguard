@@ -192,6 +192,7 @@ def render_overview_page() -> None:
 
 def _render_findings(st) -> None:
     from ...findings import load_findings
+    from ..charts import render_chart
     from ..components import findings_charts
 
     findings = load_findings()
@@ -212,12 +213,10 @@ def _render_findings(st) -> None:
         """,
         unsafe_allow_html=True,
     )
-    for index, finding in enumerate(build_findings(findings)):
+    for finding in build_findings(findings):
         with st.container(border=True):
-            if index % 2:
-                chart, text = st.columns([1.5, 1], vertical_alignment="center", gap="large")
-            else:
-                text, chart = st.columns([1, 1.5], vertical_alignment="center", gap="large")
+            # Text always comes first, so a phone shows the claim before its chart.
+            text, chart = st.columns([1, 1.5], vertical_alignment="center", gap="large")
             text.markdown(
                 f"""
                 <div class="sg-finding">
@@ -228,9 +227,4 @@ def _render_findings(st) -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            chart.plotly_chart(
-                figures[finding.figure](findings),
-                width="stretch",
-                key=f"finding-{finding.figure}",
-                config={"displayModeBar": False},
-            )
+            render_chart(chart, figures[finding.figure](findings), key=f"finding-{finding.figure}")

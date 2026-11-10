@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 from math import exp, log
 
 from ..config import SimulationConfig
@@ -15,6 +16,56 @@ PLOT_LAYOUT = {
     "legend": {"orientation": "h", "y": 1.08, "x": 0, "bgcolor": "rgba(0,0,0,0)"},
 }
 GRID = "rgba(148,197,202,0.08)"
+LEGEND_DASH = {"dash": "dashed", "dot": "dotted", "dashdot": "dashed", "longdash": "dashed"}
+FILLED = ("toself", "tozeroy", "tozerox", "tonexty", "tonextx")
+
+
+def _legend_swatch(trace) -> str:
+    """A small HTML mark that mirrors how the trace is drawn."""
+    marker, line = getattr(trace, "marker", None), getattr(trace, "line", None)
+    mode = getattr(trace, "mode", None) or ""
+    if getattr(trace, "fill", None) in FILLED and line is not None and line.width == 0:
+        return f'<i class="box" style="background:{trace.fillcolor}"></i>'
+    if trace.type == "bar":
+        color = marker.color if isinstance(marker.color, str) else "#7f989d"
+        return f'<i class="box" style="background:{color}"></i>'
+    if "lines" in mode or (not mode and line is not None and line.color):
+        dash = LEGEND_DASH.get(line.dash or "", "solid")
+        return f'<i class="line" style="border-top:2px {dash} {line.color}"></i>'
+    color = marker.color if marker is not None and isinstance(marker.color, str) else "#7f989d"
+    symbol = str(getattr(marker, "symbol", "") or "")
+    if symbol.startswith("star"):
+        return f'<b style="color:{color}">★</b>'
+    kind = "diamond" if symbol.startswith("diamond") else "dot"
+    return f'<i class="{kind}" style="background:{color}"></i>'
+
+
+def legend_html(figure) -> str:
+    """The figure's legend as wrapping HTML chips; empty when fewer than two series."""
+    chips: dict[str, str] = {}
+    for trace in figure.data:
+        name = getattr(trace, "name", None)
+        if name and trace.showlegend is not False and name not in chips:
+            chips[name] = f"<span>{_legend_swatch(trace)}{escape(name)}</span>"
+    if len(chips) < 2:
+        return ""
+    return f'<div class="sg-chart-legend">{"".join(chips.values())}</div>'
+
+
+def render_chart(target, figure, *, title: str | None = None, key: str | None = None) -> None:
+    """Draw a figure with its title and legend as HTML above it.
+
+    Plotly neither wraps a title nor reflows a legend, so on a narrow screen both collide
+    with the axes; HTML wraps. The figure itself keeps only the plot.
+    """
+    title = title or (figure.layout.meta or {}).get("title")
+    head = (f'<div class="sg-chart-title">{escape(title)}</div>' if title else "") + legend_html(
+        figure
+    )
+    if head:
+        target.markdown(f'<div class="sg-chart-head">{head}</div>', unsafe_allow_html=True)
+    figure.update_layout(showlegend=False)
+    target.plotly_chart(figure, width="stretch", key=key, config={"displayModeBar": False})
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +148,7 @@ def timeseries_figure(frames: list[SimulationFrame], config: SimulationConfig):
         annotation_font_color="#fbbf24",
     )
     figure.update_layout(height=380, hovermode="x unified", **PLOT_LAYOUT)
+    figure.update_layout(margin={"l": 10, "r": 10, "t": 16, "b": 10})
     figure.update_xaxes(title="Zaman adımı", gridcolor=GRID, zeroline=False)
     figure.update_yaxes(title="Oran", range=[0, 1.02], gridcolor=GRID, secondary_y=False)
     figure.update_yaxes(title="σ(t)", showgrid=False, secondary_y=True)
@@ -110,7 +162,8 @@ def duel_figure(runs: list[tuple[str, list[SimulationFrame], str]], config: Simu
     figure = make_subplots(
         rows=1,
         cols=3,
-        subplot_titles=("Enfekte oranı", "En büyük bileşen", "Spektral baskı σ(t)"),
+        # Short titles: three panels share a phone screen; the full names are in the header.
+        subplot_titles=("Enfekte", "Bileşen", "σ(t)"),
         horizontal_spacing=0.06,
     )
     for label, frames, color in runs:

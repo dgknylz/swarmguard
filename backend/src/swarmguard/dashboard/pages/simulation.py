@@ -5,7 +5,13 @@ from dataclasses import replace
 
 from ...config import DefenseStrategy, SimulationConfig
 from ...presets import PRESET_BY_SLUG, SCENARIO_PRESETS
-from ..charts import duel_figure, infection_map_figure, summarize_run, timeseries_figure
+from ..charts import (
+    duel_figure,
+    infection_map_figure,
+    render_chart,
+    summarize_run,
+    timeseries_figure,
+)
 from ..components.event_center import render_event_center
 from ..components.node_inspector import render_node_inspector
 from ..components.scenario_builder import DEFENSE_LABELS, render_scenario_builder
@@ -81,6 +87,14 @@ def _render_quick_lab(st, config: SimulationConfig, version: int, *, with_defens
     )
 
 
+ANALYSIS_VIEWS = {
+    "series": "📈 Zaman serileri",
+    "map": "🔥 Enfeksiyon haritası",
+    "node": "🔎 Düğüm analizi",
+    "events": "🧾 Olay merkezi",
+}
+
+
 def _render_single(st, config: SimulationConfig, frames) -> None:
     render_swarm_player(st, frames, config, height=700)
 
@@ -99,22 +113,30 @@ def _render_single(st, config: SimulationConfig, frames) -> None:
     )
     columns[4].metric("Müdahale maliyeti", f"{summary.intervention_cost:.0f}")
 
-    series_tab, map_tab, node_tab, events_tab = st.tabs(
-        ["📈 Zaman serileri", "🔥 Enfeksiyon haritası", "🔎 Düğüm analizi", "🧾 Olay merkezi"]
+    # A selector instead of st.tabs: charts in hidden tabs were drawn 700 px wide and
+    # overflowed narrow screens once shown. Only the open view is rendered.
+    view = st.segmented_control(
+        "Analiz görünümü",
+        options=list(ANALYSIS_VIEWS),
+        default="series",
+        format_func=ANALYSIS_VIEWS.get,
+        key="simulation-analysis",
+        label_visibility="collapsed",
+        width="stretch",
     )
-    with series_tab:
-        st.plotly_chart(timeseries_figure(frames, config), width="stretch")
+    if view in (None, "series"):
+        render_chart(st, timeseries_figure(frames, config))
         st.caption(
             "Sarı eğri σ(t), sağ eksende. Kesikli çizginin altında kalan her adım, Teorem 2'deki "
             "üst sınırı küçültür."
         )
-    with map_tab:
-        st.plotly_chart(infection_map_figure(frames), width="stretch")
+    elif view == "map":
+        render_chart(st, infection_map_figure(frames))
         st.caption(
             "Her satır bir İHA, her sütun bir zaman adımı: kırmızı enfekte, sarı karantinada. "
             "Satırlar ilk enfeksiyon anına göre sıralandığından salgının şelalesi yukarıdan aşağı okunur."
         )
-    with node_tab:
+    elif view == "node":
         node_column, step_column = st.columns([1, 2.4], vertical_alignment="bottom")
         node = node_column.selectbox(
             "İHA incele",
@@ -127,7 +149,7 @@ def _render_single(st, config: SimulationConfig, frames) -> None:
         )
         st.session_state["selected_uav"] = int(node)
         render_node_inspector(st, frames, int(step), int(node))
-    with events_tab:
+    else:
         render_event_center(st, frames)
 
 
@@ -186,7 +208,8 @@ def _render_duel(st, config: SimulationConfig) -> None:
         f"{b.geometric_sigma - a.geometric_sigma:+.3f}",
         delta_color="inverse",
     )
-    st.plotly_chart(
+    render_chart(
+        st,
         duel_figure(
             [
                 (f"A · {DEFENSE_LABELS[defense_a]}", frames_a, "#94a3b8"),
@@ -194,7 +217,7 @@ def _render_duel(st, config: SimulationConfig) -> None:
             ],
             config,
         ),
-        width="stretch",
+        title="Enfekte oranı · en büyük bileşen · spektral baskı σ(t)",
     )
 
 
