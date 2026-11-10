@@ -10,3 +10,4 @@ build/
 .streamlit/secrets.toml
 data/results/*
 !data/results/.gitkeep
+.claude/

@@ -96,12 +96,18 @@ def score_link_candidates(
     path_normalizer = max(1, observation.node_count - 2)
     scored: list[LinkCandidate] = []
     normalized_weights = (weights or ScoreWeights()).normalized()
+    # One BFS per source instead of one per candidate pair: same lengths, O(n·m) work.
+    path_lengths: dict[int, dict[int, int]] = {}
 
     for candidate in candidates:
         if component_by_node[candidate.source] != component_by_node[candidate.target]:
             connectivity_gain = 1.0
         else:
-            path_length = nx.shortest_path_length(graph, candidate.source, candidate.target)
+            if candidate.source not in path_lengths:
+                path_lengths[candidate.source] = nx.single_source_shortest_path_length(
+                    graph, candidate.source
+                )
+            path_length = path_lengths[candidate.source][candidate.target]
             connectivity_gain = min(1.0, max(0.0, (path_length - 1) / path_normalizer))
 
         safety_score = 1.0 - (risk.get(candidate.source, 0.0) + risk.get(candidate.target, 0.0)) / 2

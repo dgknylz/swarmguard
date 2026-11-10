@@ -20,7 +20,8 @@ THEME_CSS = """
         background: transparent;
     }
 
-    [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none; }
+    /* On a phone Streamlit moves the top navigation into the sidebar: it must stay reachable. */
+    [data-testid="stSidebar"] { background: #08151a; border-right: 1px solid var(--sg-border); }
     [data-testid="stTopNav"] { border-bottom: 1px solid var(--sg-border); }
     [data-testid="stTopNav"] a { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.025em; }
 
@@ -541,7 +542,121 @@ THEME_CSS = """
 </style>
 """
 
+# Second layer: typography, quieter chrome and the theory/landing components.
+REFRESH_CSS = """
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+    :root { --sg-font-sans: Inter, "Segoe UI", system-ui, sans-serif; }
+    [data-testid="stAppViewContainer"] {
+        background:
+            radial-gradient(70rem 40rem at 85% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+            radial-gradient(60rem 36rem at -10% 20%, rgba(94, 234, 212, 0.06), transparent 60%),
+            #050c10;
+    }
+    .block-container { max-width: 1440px; padding-top: 0.8rem; }
+    .sg-site-header { margin-bottom: 0.9rem; padding: 0.55rem 0.9rem; border-radius: 0.9rem; }
+    .sg-topbar { margin-bottom: 1rem; padding-bottom: 0.9rem; }
+    .sg-topbar h1 { font-size: clamp(1.5rem, 2.4vw, 2rem); }
+    [data-testid="stMetric"] {
+        padding: 0.85rem 1rem; border: 1px solid rgba(148, 197, 202, 0.12); border-radius: 0.9rem;
+        background: linear-gradient(180deg, rgba(16, 38, 44, 0.55), rgba(9, 22, 27, 0.55));
+    }
+    [data-testid="stMetricValue"] { font-family: "JetBrains Mono", Consolas, monospace; letter-spacing: -0.02em;
+        font-size: clamp(1.25rem, 2.1vw, 2.25rem); }
+    /* A value never loses its end to an ellipsis: it wraps instead. */
+    [data-testid="stMetricValue"] > div { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; line-height: 1.15; }
+    [data-testid="stExpander"] details { border-radius: 0.9rem; border-color: rgba(148, 197, 202, 0.14); }
+    iframe[title="st.iframe"], [data-testid="stIFrame"] { border-radius: 18px; }
+    .katex { color: #e6f4f2; font-size: 1.12em; }
+
+    .sg-landing { padding: 0.4rem 0 1rem; }
+    .sg-landing .sg-kicker { display: inline-flex; gap: 0.5rem; align-items: center; padding: 0.35rem 0.75rem;
+        border: 1px solid rgba(94, 234, 212, 0.3); border-radius: 999px; color: #5eead4; font-size: 0.68rem;
+        font-weight: 800; letter-spacing: 0.14em; background: rgba(94, 234, 212, 0.06); }
+    .sg-landing h1 { margin: 1.1rem 0 0.8rem; color: #f1fbfa; font-size: clamp(2.2rem, 4.2vw, 3.6rem);
+        line-height: 1.02; letter-spacing: -0.045em; }
+    .sg-landing h1 em { font-style: normal; background: linear-gradient(90deg, #5eead4, #38bdf8);
+        -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .sg-landing p { max-width: 36rem; color: #9db3b6; font-size: 1.02rem; line-height: 1.65; }
+    .sg-equation { margin: 1.2rem 0 0.4rem; padding: 0.9rem 1.1rem; border: 1px solid rgba(251, 191, 36, 0.28);
+        border-radius: 1rem; background: rgba(251, 191, 36, 0.05); color: #fde68a; font: 600 0.95rem "JetBrains Mono", monospace; }
+    .sg-equation small { display: block; margin-top: 0.3rem; color: #a3b4b6; font: 500 0.78rem Inter, sans-serif; }
+
+    .sg-theory-hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 2rem; align-items: center;
+        margin-bottom: 1rem; padding: 1.6rem 1.8rem; border: 1px solid rgba(148, 197, 202, 0.14); border-radius: 1.3rem;
+        background: radial-gradient(40rem 20rem at 100% 0%, rgba(167, 139, 250, 0.12), transparent 60%),
+            linear-gradient(135deg, rgba(14, 34, 41, 0.9), rgba(7, 17, 21, 0.9)); }
+    .sg-th-kicker { color: #a78bfa; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.16em; }
+    .sg-th-hero-title { margin: 0.4rem 0; color: #f1fbfa; font-size: 1.9rem; font-weight: 750; letter-spacing: -0.035em; }
+    .sg-theory-hero p { margin: 0; color: #93a9ad; line-height: 1.6; }
+    .sg-theory-hero ol { margin: 0; padding-left: 1.1rem; color: #b9cccc; line-height: 2; }
+    .sg-theory-hero ol b { color: #fbbf24; margin-right: 0.4rem; }
+    .sg-theorem-head { margin: 0.6rem 0 0.4rem; }
+    .sg-th-title { margin: 0.35rem 0 0.2rem; color: #eef9f8; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+    .sg-theorem-head p { margin: 0; color: #8fa6aa; }
+    .sg-card-title { color: #fbbf24; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; }
+    @media (max-width: 900px) { .sg-theory-hero { grid-template-columns: 1fr; } }
+    .sg-chart-head { margin-bottom: -0.6rem; }
+    .sg-chart-title { color: #e6f4f2; font-size: 0.95rem; font-weight: 700; line-height: 1.35; }
+    .sg-chart-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-top: 0.35rem;
+        color: #b7cbcb; font-size: 0.78rem; }
+    .sg-chart-legend span { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+    .sg-chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+    .sg-chart-legend i.line { width: 18px; height: 0; border-radius: 0; }
+    .sg-chart-legend i.box { border-radius: 2px; }
+    .sg-chart-legend i.diamond { width: 9px; height: 9px; border-radius: 1px; transform: rotate(45deg); }
+    .sg-chart-legend b { font-size: 0.95rem; line-height: 1; }
+    .sg-findings-head { margin: 1.6rem 0 0.6rem; }
+    .sg-findings-head p { margin: 0; color: #8fa6aa; }
+    .sg-findings-head code { color: #5eead4; background: rgba(94, 234, 212, 0.08); }
+    .sg-finding { padding: 0.4rem 0.6rem; }
+    .sg-finding h3 { margin: 0.5rem 0 0.6rem; padding: 0; color: #f1fbfa; font-size: 1.45rem;
+        line-height: 1.2; letter-spacing: -0.03em; }
+    .sg-finding p { margin: 0; color: #9db3b6; line-height: 1.65; }
+
+    /* Motion: content rises in once when it mounts; reruns keep mounted elements still. */
+    @keyframes sg-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes sg-sheen { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+    @keyframes sg-breathe { 50% { box-shadow: 0 0 28px rgba(251, 191, 36, 0.2); border-color: rgba(251, 191, 36, 0.5); } }
+    @keyframes sg-ping { 0% { box-shadow: 0 0 0 0 rgba(94, 234, 212, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(94, 234, 212, 0); } }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"],
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+        animation: sg-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(2) { animation-delay: 0.05s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(3) { animation-delay: 0.1s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(4) { animation-delay: 0.15s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(5) { animation-delay: 0.2s; }
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] > :nth-child(n+6) { animation-delay: 0.25s; }
+    .sg-landing h1 em {
+        background-image: linear-gradient(90deg, #5eead4, #38bdf8, #a78bfa, #5eead4);
+        background-size: 250% 100%; animation: sg-sheen 7s ease-in-out infinite alternate;
+    }
+    .sg-equation { animation: sg-breathe 4.5s ease-in-out infinite; }
+    .sg-kicker { animation: sg-ping 2.4s ease-out infinite; }
+    [data-testid="stMetric"] { transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease; }
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-3px); border-color: rgba(94, 234, 212, 0.4);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(94, 234, 212, 0.08);
+    }
+    [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+        border: 0 !important; color: #032b26 !important; font-weight: 700 !important;
+        background: linear-gradient(135deg, #5eead4, #38bdf8) !important;
+        box-shadow: 0 10px 26px rgba(56, 189, 248, 0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    [data-testid="stBaseButton-primary"]:hover, [data-testid="stBaseButton-primaryFormSubmit"]:hover {
+        transform: translateY(-1px); box-shadow: 0 14px 32px rgba(56, 189, 248, 0.38);
+    }
+    .sg-button { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+    .sg-button:hover { transform: translateY(-2px); }
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+</style>
+"""
+
 
 def apply_theme(st) -> None:
     st.markdown(design_token_css(), unsafe_allow_html=True)
     st.markdown(THEME_CSS, unsafe_allow_html=True)
+    st.markdown(REFRESH_CSS, unsafe_allow_html=True)

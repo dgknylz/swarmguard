@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import networkx as nx
 
+from .spectral import adjacency_from_edges, spectral_radius
+
 
 def calculate_metrics(graph: nx.Graph, infected: set[int]) -> dict[str, float | int]:
     node_count = graph.number_of_nodes()
@@ -22,4 +24,5 @@ def calculate_metrics(graph: nx.Graph, infected: set[int]) -> dict[str, float | 
         "largest_component_ratio": largest_component / node_count,
         "global_efficiency": float(nx.global_efficiency(graph)),
         "algebraic_connectivity": lambda_2,
+        "spectral_radius": spectral_radius(adjacency_from_edges(node_count, graph.edges)),
     }

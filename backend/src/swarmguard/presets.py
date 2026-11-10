@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .config import AttackStrategy, DefenseStrategy, SimulationConfig
 
@@ -20,6 +20,27 @@ DEMO_CONFIG = SimulationConfig(
     defense_max_degree=7,
 )
 
+# The showcase: Spektral Kalkan under a tight budget and imperfect detection, the regime
+# where the Perron ordering is measurably better than a random one (README, Tablo 2).
+SHOWCASE_CONFIG = replace(
+    DEMO_CONFIG,
+    defense_strategy=DefenseStrategy.SPECTRAL_SHIELD,
+    defense_budget=1,
+    detection_probability=0.5,
+    defense_memory=3,
+    initial_infected_count=6,
+)
+
+# Undefended pair around the extinction threshold of Teorem 2 (β* ≈ 0.034 for γ = 0.2).
+THRESHOLD_BASE = replace(
+    DEMO_CONFIG,
+    gamma=0.2,
+    steps=80,
+    initial_infected_count=4,
+    defense_strategy=DefenseStrategy.NONE,
+    defense_budget=0,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ScenarioPreset:
@@ -33,19 +54,35 @@ class ScenarioPreset:
 
 SCENARIO_PRESETS = (
     ScenarioPreset(
-        slug="gtad-demo",
-        title="GTAD Dengeli Demo",
+        slug="spectral-demo",
+        title="Spektral Kalkan Demo",
         category="Önerilen",
-        description="Adaptif topoloji savunmasını dengeli saldırı ve hareket koşullarında gösterir.",
+        description="Adım başına tek müdahale ve %50 tespitle Perron sıralı karantinayı gösterir.",
         icon="◈",
-        config=DEMO_CONFIG,
+        config=SHOWCASE_CONFIG,
+    ),
+    ScenarioPreset(
+        slug="below-threshold",
+        title="Eşik Altı · Garantili Sönüm",
+        category="Teori",
+        description="β < β*: Teorem 2 savunma olmadan da salgının söneceğini garanti eder.",
+        icon="↘",
+        config=replace(THRESHOLD_BASE, beta=0.027),
+    ),
+    ScenarioPreset(
+        slug="above-threshold",
+        title="Eşik Üstü · Kalıcı Salgın",
+        category="Teori",
+        description="Aynı sürü, β ≈ 3β*: garanti biter ve salgın savunmasız ağda tutunur.",
+        icon="↗",
+        config=replace(THRESHOLD_BASE, beta=0.10),
     ),
     ScenarioPreset(
         slug="rapid-outbreak",
         title="Hızlı Salgın",
         category="Saldırı",
         description="Yüksek beta ve düşük iyileşme oranıyla savunmanın tepki hızını zorlar.",
-        icon="↗",
+        icon="⚡",
         config=SimulationConfig(
             node_count=36,
             area_width=1_100,
@@ -58,7 +95,7 @@ SCENARIO_PRESETS = (
             seed=1307,
             initial_infected_count=3,
             attack_strategy=AttackStrategy.HIGHEST_BETWEENNESS,
-            defense_strategy=DefenseStrategy.GTAD_RISK,
+            defense_strategy=DefenseStrategy.SPECTRAL_SHIELD,
             defense_budget=3,
             defense_range_multiplier=1.7,
             defense_max_degree=9,
@@ -137,6 +174,14 @@ SCENARIO_PRESETS = (
         ),
     ),
     ScenarioPreset(
+        slug="gtad-demo",
+        title="GTAD Dengeli Demo",
+        category="Karşılaştırma",
+        description="Rapor Tablo 6–7'nin koşulu: GTAD bağlantısallığı artırır, yayılımı değiştirmez.",
+        icon="◇",
+        config=DEMO_CONFIG,
+    ),
+    ScenarioPreset(
         slug="unprotected-baseline",
         title="Savunmasız Baseline",
         category="Referans",
@@ -178,10 +223,12 @@ SCENARIO_PRESETS = (
             seed=9001,
             initial_infected_count=3,
             attack_strategy=AttackStrategy.HIGHEST_DEGREE,
-            defense_strategy=DefenseStrategy.GTAD_RISK,
+            defense_strategy=DefenseStrategy.SPECTRAL_SHIELD,
             defense_budget=3,
             defense_range_multiplier=1.9,
             defense_max_degree=8,
+            detection_probability=0.5,
+            defense_memory=3,
         ),
     ),
 )

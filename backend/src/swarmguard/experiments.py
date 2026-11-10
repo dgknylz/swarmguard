@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, replace
 from hashlib import sha256
 from json import dumps
 from math import sqrt
-from statistics import fmean, stdev
+from statistics import fmean, pvariance, stdev
 
+from scipy.stats import binomtest
 from scipy.stats import t as student_t
 
 from .algorithms.defense.gtad_candidates import ScoreWeights
 from .algorithms.defense.gtad_risk import GtadRiskAlgorithm
 from .config import DefenseStrategy, SimulationConfig
 from .engine import SimulationEngine, SimulationFrame
+
+SOFTWARE_VERSION = "2.0.0"
 
 RESULT_METRICS = (
     "final_infected_ratio",
@@ -22,8 +25,22 @@ RESULT_METRICS = (
     "mean_largest_component_ratio",
     "mean_global_efficiency",
     "mean_algebraic_connectivity",
+    "mean_spectral_radius",
     "total_intervention_cost",
 )
+
+LOWER_IS_BETTER = frozenset(
+    {
+        "final_infected_ratio",
+        "peak_infected_ratio",
+        "mean_infected_ratio",
+        "mean_spectral_radius",
+        "total_intervention_cost",
+    }
+)
+
+# Paired differences closer to zero than this count as ties in the sign test.
+TIE_TOLERANCE = 1e-12
 
 GTAD_ABLATIONS = {
     "full": ScoreWeights(0.50, 0.30, 0.20),
@@ -61,6 +78,72 @@ def calculate_statistics(values: Iterable[float]) -> dict[str, float | int]:
     }
 
 
+def paired_tests(
+    deltas: Sequence[float], *, lower_is_better: bool
+) -> dict[str, float | int | None]:
+    """Two-sided paired t-test, Cohen's d_z and an exact sign test on method − baseline.
+
+    ``wins`` counts seeds where the method beat the baseline in the metric's preferred
+    direction; ties are excluded from the sign test.
+    """
+    sample = tuple(float(delta) for delta in deltas)
+    count = len(sample)
+    mean = fmean(sample) if sample else 0.0
+    deviation = stdev(sample) if count > 1 else 0.0
+    if count < 2:
+        p_value = effect_size = None
+    elif deviation == 0:
+        p_value = 1.0 if abs(mean) <= TIE_TOLERANCE else 0.0
+        effect_size = None
+    else:
+        statistic = mean / (deviation / sqrt(count))
+        p_value = float(2 * student_t.sf(abs(statistic), count - 1))
+        effect_size = mean / deviation
+
+    better = [
+        delta < -TIE_TOLERANCE if lower_is_better else delta > TIE_TOLERANCE for delta in sample
+    ]
+    worse = [
+        delta > TIE_TOLERANCE if lower_is_better else delta < -TIE_TOLERANCE for delta in sample
+    ]
+    wins, losses = sum(better), sum(worse)
+    sign_p_value = float(binomtest(wins, wins + losses, 0.5).pvalue) if wins + losses else 1.0
+    return {
+        "p_value": p_value,
+        "effect_size": effect_size,
+        "wins": wins,
+        "losses": losses,
+        "ties": count - wins - losses,
+        "sign_p_value": sign_p_value,
+    }
+
+
+def holm_adjust(p_values: Sequence[float | None]) -> list[float | None]:
+    """Holm–Bonferroni step-down adjustment; ``None`` entries are left untouched."""
+    ranked = sorted((value, index) for index, value in enumerate(p_values) if value is not None)
+    adjusted: list[float | None] = [None] * len(p_values)
+    running = 0.0
+    for rank, (value, index) in enumerate(ranked):
+        running = max(running, min(1.0, (len(ranked) - rank) * value))
+        adjusted[index] = running
+    return adjusted
+
+
+def _variance_reduction(baseline: Sequence[float], method: Sequence[float]) -> float | None:
+    """Share of Var(method) + Var(baseline) removed by pairing runs on the same seed.
+
+    Var(X − Y) = Var X + Var Y − 2·Cov(X, Y): common random numbers make the covariance
+    positive, which is why paired differences need far fewer seeds.
+    """
+    if len(baseline) < 2:
+        return None
+    independent = pvariance(baseline) + pvariance(method)
+    if independent <= 0:
+        return None
+    paired = pvariance([b - a for a, b in zip(baseline, method, strict=True)])
+    return 1 - paired / independent
+
+
 def _finalize_result(
     result: dict[str, object],
     base_config: SimulationConfig,
@@ -70,7 +153,7 @@ def _finalize_result(
 ) -> dict[str, object]:
     manifest_core: dict[str, object] = {
         "schema_version": "1.0",
-        "software": {"name": "swarmguard", "version": "0.1.0"},
+        "software": {"name": "swarmguard", "version": SOFTWARE_VERSION},
         "experiment": {
             "kind": result["kind"],
             "scenario": _scenario_dict(base_config),
@@ -126,6 +209,9 @@ def _summarize_run(
         "mean_algebraic_connectivity": fmean(
             float(frame.metrics["algebraic_connectivity"]) for frame in measured
         ),
+        "mean_spectral_radius": fmean(
+            float(frame.metrics["spectral_radius"]) for frame in measured
+        ),
         "total_intervention_cost": intervention_cost,
     }
 
@@ -166,14 +252,16 @@ def _paired_comparisons(
             }
             pairs.append({"seed": seed, "deltas": deltas})
 
-        delta_statistics = (
-            {
-                metric: calculate_statistics(float(pair["deltas"][metric]) for pair in pairs)
-                for metric in RESULT_METRICS
+        delta_statistics: dict[str, dict[str, object]] = {}
+        for metric in RESULT_METRICS if pairs else ():
+            deltas = [float(pair["deltas"][metric]) for pair in pairs]
+            baseline_values = [float(by_key[(baseline, pair["seed"])][metric]) for pair in pairs]
+            method_values = [float(by_key[(method, pair["seed"])][metric]) for pair in pairs]
+            delta_statistics[metric] = {
+                **calculate_statistics(deltas),
+                **paired_tests(deltas, lower_is_better=metric in LOWER_IS_BETTER),
+                "variance_reduction": _variance_reduction(baseline_values, method_values),
             }
-            if pairs
-            else {}
-        )
         mean_deltas = {
             metric: float(statistics["mean"]) for metric, statistics in delta_statistics.items()
         }
@@ -187,6 +275,15 @@ def _paired_comparisons(
                 "delta_statistics": delta_statistics,
             }
         )
+
+    # Every method is tested against the same baseline, so each metric forms one
+    # family of hypotheses for the Holm correction.
+    for metric in RESULT_METRICS:
+        family = [comparison["delta_statistics"].get(metric) for comparison in comparisons]
+        adjusted = holm_adjust([item["p_value"] if item else None for item in family])
+        for item, value in zip(family, adjusted, strict=True):
+            if item is not None:
+                item["p_value_holm"] = value
     return comparisons
 
 

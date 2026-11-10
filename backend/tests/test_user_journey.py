@@ -2,6 +2,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from swarmguard.config import DefenseStrategy
+
 
 def contains_markdown(app: AppTest, text: str) -> bool:
     return any(text in str(element.value) for element in app.markdown)
@@ -14,7 +16,8 @@ def test_user_journey_opens_complete_application_shell() -> None:
     assert not app.exception
     assert contains_markdown(app, "SWARMGUARD")
     assert contains_markdown(app, "Dinamik İHA ağlarını")
-    assert contains_markdown(app, "SİSTEM ÇEVRİMİÇİ")
+    assert contains_markdown(app, "spektral teoriyle")
+    assert len(app.latex) == 4
 
 
 def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
@@ -23,8 +26,6 @@ def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
         "render_simulation_page()",
         default_timeout=60,
     ).run()
-    app.segmented_control[0].set_value("settings")
-    app.run()
     next(item for item in app.number_input if item.label == "İHA sayısı").set_value(8)
     next(item for item in app.number_input if item.label == "Zaman adımı").set_value(3)
     next(item for item in app.button if item.label == "Senaryoyu doğrula ve çalıştır").click()
@@ -33,9 +34,9 @@ def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
     assert not app.exception
     assert app.session_state["config"].node_count == 8
     assert len(app.session_state["frames"]) == 4
+    assert any(metric.label == "Geometrik ortalama σ̄" for metric in app.metric)
 
-    app.segmented_control[0].set_value("live")
-    app.run()
+    app.segmented_control(key="simulation-analysis").set_value("node").run()
     next(item for item in app.selectbox if item.label == "İHA incele").set_value(3)
     app.run()
 
@@ -44,11 +45,54 @@ def test_user_journey_builds_scenario_inspects_node_and_opens_events() -> None:
     assert contains_markdown(app, "UAV-03")
     assert contains_markdown(app, "DÜĞÜM İNCELEME PANELİ")
 
-    app.segmented_control[0].set_value("analysis")
-    app.run()
+    app.segmented_control(key="simulation-analysis").set_value("events").run()
     assert not app.exception
     assert contains_markdown(app, "OLAY VE SALDIRI MERKEZİ")
-    assert not contains_markdown(app, "DÜĞÜM İNCELEME PANELİ")
+
+
+def test_user_journey_tunes_the_live_lab_and_runs_a_duel() -> None:
+    app = AppTest.from_string(
+        "from swarmguard.dashboard.pages.simulation import render_simulation_page\n"
+        "render_simulation_page()",
+        default_timeout=90,
+    ).run()
+    next(item for item in app.selectbox if item.label == "Savunma").set_value(
+        DefenseStrategy.CENTRALITY_QUARANTINE
+    )
+    app.run()
+
+    assert not app.exception
+    assert app.session_state["config"].defense_strategy is DefenseStrategy.CENTRALITY_QUARANTINE
+    assert app.session_state["config_version"] == 1
+
+    app.segmented_control[0].set_value("duel")
+    app.run()
+
+    assert not app.exception
+    assert any(metric.label == "Tepe enfeksiyon · B" for metric in app.metric)
+    assert {box.label for box in app.selectbox} >= {"A · savunma", "B · savunma"}
+
+
+def test_user_journey_reads_theory_lab() -> None:
+    app = AppTest.from_string(
+        "from swarmguard.dashboard.pages.theory import render_theory_page\nrender_theory_page()",
+        default_timeout=120,
+    ).run()
+
+    assert not app.exception
+    assert contains_markdown(app, "Dört sonuç, dört sayısal doğrulama.")
+    latex = charts = 0
+    for section in ("theorem-1", "theorem-2", "proposition-3", "lemma-4", "threshold"):
+        app.segmented_control(key="theory-section").set_value(section).run()
+        assert not app.exception
+        latex += len(app.latex)
+        charts += len(app.get("plotly_chart"))
+    assert latex >= 8
+    assert charts >= 8
+
+    app.segmented_control(key="theory-section").set_value("references").run()
+    assert not app.exception
+    assert contains_markdown(app, "KAYNAKLAR VE ÖZGÜNLÜK")
 
 
 def test_user_journey_runs_experiment_compares_and_builds_report() -> None:
@@ -67,7 +111,7 @@ render_experiments_page()
 
     assert not app.exception
     assert len(app.session_state["experiment_history"]) == 1
-    assert app.session_state["experiment_history"][0]["run_count"] == 4
+    assert app.session_state["experiment_history"][0]["run_count"] == 12
     assert contains_markdown(app, "DENEY TAMAMLANDI")
 
     app.segmented_control[0].set_value("comparison")
@@ -118,6 +162,6 @@ def test_user_journey_reads_methodology_and_product_scope() -> None:
     assert contains_markdown(methodology, "METODOLOJİ VE ALGORİTMALAR")
     assert len(methodology.latex) == 6
     assert not about.exception
-    assert contains_markdown(about, "SWARMGUARD · v1.1.0")
+    assert contains_markdown(about, "SWARMGUARD · v2.0.0")
     assert contains_markdown(about, "47 / 47 adım")
     assert any(expander.label == "Tasarım sistemi vitrini" for expander in about.expander)

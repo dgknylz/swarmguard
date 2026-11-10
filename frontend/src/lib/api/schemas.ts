@@ -11,6 +11,9 @@ export const defenseStrategySchema = z.enum([
   "random_rewiring",
   "centrality_quarantine",
   "gtad_risk",
+  "spectral_shield",
+  "random_addition",
+  "random_quarantine",
 ]);
 
 export const sessionStatusSchema = z.enum([

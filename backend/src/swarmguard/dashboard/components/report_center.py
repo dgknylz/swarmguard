@@ -5,7 +5,7 @@ from html import escape
 
 from ...experiments import RESULT_METRICS
 from ..error_states import render_empty_state
-from .comparison_panel import baseline_method, build_comparison_rows
+from .comparison_panel import baseline_method, leading_methods
 from .experiment_center import EXPERIMENT_LABELS, METHOD_LABELS, METRIC_LABELS
 
 
@@ -31,8 +31,10 @@ def build_report_document(
     author: str = "SwarmGuard Araştırma Ekibi",
     note: str = "",
 ) -> ReportDocument:
-    security = build_comparison_rows(result, "mean_infected_ratio")[0]
-    connectivity = build_comparison_rows(result, "mean_largest_component_ratio")[0]
+    def leaders(metric: str) -> str:
+        rows = leading_methods(result, metric)
+        return rows[0].method if len(rows) == 1 else " = ".join(row.label for row in rows)
+
     return ReportDocument(
         experiment_id=str(result["experiment_id"]),
         title=title.strip() or "SwarmGuard Deney Raporu",
@@ -42,8 +44,8 @@ def build_report_document(
         run_count=int(result["run_count"]),
         seed_count=len(result["seeds"]),
         baseline=baseline_method(result),
-        best_security_method=security.method,
-        best_connectivity_method=connectivity.method,
+        best_security_method=leaders("mean_infected_ratio"),
+        best_connectivity_method=leaders("mean_largest_component_ratio"),
         fingerprint=str(result["manifest"]["fingerprint"]),
     )
 
@@ -145,6 +147,11 @@ Farklar `yöntem - baseline` biçimindedir ve aynı seed sonuçları eşleştiri
 
 def report_to_html(document: ReportDocument, result: dict[str, object]) -> bytes:
     scenario = result["scenario"]
+
+    def value(key: str) -> str:
+        # Experiments can arrive from an imported workspace file, so escape them too.
+        return escape(str(scenario[key]))
+
     summary_rows = "".join(
         "<tr><td>"
         + escape(METHOD_LABELS.get(str(summary["method"]), str(summary["method"])))
@@ -169,7 +176,7 @@ body{{margin:0;background:#071216;color:#dceae8;font:14px Arial,sans-serif;line-
 </style></head><body><main><header><small>SWARMGUARD · ARAŞTIRMA RAPORU</small><h1>{escape(document.title)}</h1><p>{escape(document.author)}</p><code>{escape(document.fingerprint)}</code></header>
 <div class="meta"><div><b>DENEY</b>{escape(document.experiment_id)}</div><div><b>TÜR</b>{escape(EXPERIMENT_LABELS[document.kind])}</div><div><b>KOŞU</b>{document.run_count}</div><div><b>SEED</b>{document.seed_count}</div></div>
 <section><h2>Yönetici Özeti</h2><p>Enfeksiyon kontrolünde en iyi gözlenen yöntem <strong>{escape(METHOD_LABELS.get(document.best_security_method, document.best_security_method))}</strong>; bağlantısallıkta en iyi gözlenen yöntem <strong>{escape(METHOD_LABELS.get(document.best_connectivity_method, document.best_connectivity_method))}</strong>. Referans yöntem: <strong>{escape(METHOD_LABELS.get(document.baseline, document.baseline))}</strong>.</p><blockquote>Bu sıralamalar gözlenen örneklem ortalamalarını gösterir; tek başına istatistiksel anlamlılık iddiası değildir.</blockquote></section>
-<section><h2>Senaryo</h2><ul><li>{scenario["node_count"]} İHA, {scenario["steps"]} adım</li><li>Alan: {scenario["area_width"]} × {scenario["area_height"]} m</li><li>Menzil: {scenario["communication_range"]} m</li><li>β={scenario["beta"]} · γ={scenario["gamma"]}</li><li>Seed: {escape(", ".join(map(str, result["seeds"])))}</li></ul></section>
+<section><h2>Senaryo</h2><ul><li>{value("node_count")} İHA, {value("steps")} adım</li><li>Alan: {value("area_width")} × {value("area_height")} m</li><li>Menzil: {value("communication_range")} m</li><li>β={value("beta")} · γ={value("gamma")}</li><li>Seed: {escape(", ".join(map(str, result["seeds"])))}</li></ul></section>
 <section><h2>Yöntem Ortalamaları</h2><div style="overflow:auto"><table><thead><tr><th>Yöntem</th>{header_cells}</tr></thead><tbody>{summary_rows}</tbody></table></div></section>{note}
 <section><h2>Tekrarlanabilirlik</h2><p>SwarmGuard {escape(str(result["manifest"]["software"]["version"]))} · Şema {escape(str(result["manifest"]["schema_version"]))} · İki taraflı %95 Student-t güven aralığı.</p><code>{escape(document.fingerprint)}</code></section>
 </main></body></html>"""

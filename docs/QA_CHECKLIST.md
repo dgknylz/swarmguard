@@ -4,7 +4,7 @@
 
 - [x] Backend Ruff statik kontrolü
 - [x] Backend Ruff format kontrolü
-- [x] Backend: 91 pytest testi
+- [x] Backend: 134 pytest testi
 - [x] Frontend: 20 Vitest testi
 - [x] Frontend ESLint kontrolü
 - [x] TypeScript `tsc --noEmit`

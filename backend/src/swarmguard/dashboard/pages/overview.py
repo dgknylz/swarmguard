@@ -4,6 +4,100 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from ...config import SimulationConfig
+from ...presets import SHOWCASE_CONFIG
+
+THEOREM_CARDS = (
+    (
+        "TEOREM 1",
+        "Bağlantı olasılığı",
+        r"F(r)=\dfrac{\pi WHr^2-\frac43(W+H)r^3+\frac12r^4}{W^2H^2}",
+        "Görev alanının sınırları dahil kesin beklenen derece.",
+    ),
+    (
+        "TEOREM 2",
+        "Spektral üst sınır",
+        r"\mathbb E[I(t)]\le\sqrt{nI_0}\,\prod_{s\le t}\sigma(s)",
+        "σ̄ < 1 ise salgın üstel hızla söner.",
+    ),
+    (
+        "ÖNERME 3",
+        "Bulaş sınırı",
+        r"\mathbb E[\Delta I^+\mid X]\le\beta\,|\partial I|",
+        "Kesilmesi gereken nicelik: sağlıklı–enfekte kenarları.",
+    ),
+    (
+        "LEMMA 4",
+        "Rayleigh pertürbasyonu",
+        r"\lambda_1(A_{-i})\ge\lambda_1(1-2u_i^2)",
+        "Spektral Kalkan savunmasının matematiksel temeli.",
+    ),
+)
+
+
+@dataclass(frozen=True)
+class Finding:
+    kicker: str
+    headline: str
+    body: str
+    figure: str
+
+
+def _percent(value: float) -> str:
+    return f"%{value * 100:.1f}"
+
+
+def build_findings(findings: Mapping[str, Any]) -> tuple[Finding, ...]:
+    """Three headline sentences written from the shipped experiment data."""
+    onsets = [float(item["tightness"]) for item in findings["thresholds"] if item["tightness"]]
+    # The ordering settings run from the loosest (ample budget) to the tightest one.
+    loose, tight = findings["ordering"][0], findings["ordering"][-1]
+    tables = {
+        item["key"]: {row["method"]: row for row in item["rows"]} for item in findings["tables"]
+    }
+    easy, hard = tables["perfect"], tables["constrained"]
+    dense = min(findings["thresholds"], key=lambda item: item["tightness"] or float("inf"))
+    rival = hard["centrality_quarantine"]
+    return (
+        Finding(
+            "BULGU 1 · EŞİK DOĞRU YERDE",
+            f"Salgın, teorik eşiğin ×{min(onsets):.1f}–×{max(onsets):.1f} katında başlıyor.",
+            f"β < β* iken sönüm ispatlıdır ve {len(onsets)} farklı sürünün hiçbirinde bozulmuyor. "
+            "β eşiğin katları olarak tarandığında bütün eğriler sıfırdan eşiğin sağında ayrılıyor; "
+            f"sürü yoğunlaştıkça fark kapanıyor ({dense['node_count']} İHA'lık "
+            f"{dense['title']} senaryosunda ×{dense['tightness']:.1f}).",
+            "collapse",
+        ),
+        Finding(
+            "BULGU 2 · SIRALAMANIN DEĞERİ",
+            f"Bütçe daraldığında Perron sırası {tight['wins']}–{tight['losses']} öne geçiyor.",
+            "Kontrol grubu Spektral Kalkan'ın aynısıdır, yalnızca karantina sırası rastgeledir. "
+            + (
+                "Bütçe bolken iki yöntem aynı sonucu verir; "
+                if loose["wins"] == loose["losses"] == 0
+                else "Bütçe bolken fark küçüktür; "
+            )
+            + "adım başına tek müdahale ve %50 tespitte ortalama enfeksiyon "
+            f"{_percent(tight['control']['mean'])} yerine {_percent(tight['shield']['mean'])} olur "
+            f"(eşleştirilmiş t testi, p = {tight['p_value']:.3f}).",
+            "ordering",
+        ),
+        Finding(
+            "BULGU 3 · GÜVENLİK VE BAĞLANTI BİRLİKTE",
+            "Karantina yöntemleri içinde en bağlı ağ Spektral Kalkan'da.",
+            "Bağlantı ekleyen yöntemler (GTAD, rastgele ekleme) yayılımı düşürmüyor; karantina "
+            "düşürüyor ama ağı parçalıyor. Spektral Kalkan kalan bütçeyle ağı onarır: kusursuz "
+            f"tespitte merkeziyet karantinasıyla aynı enfeksiyonda "
+            f"({_percent(easy['spectral_shield']['infection']['mean'])}) en büyük bileşen "
+            f"{_percent(easy['centrality_quarantine']['connectivity']['mean'])} yerine "
+            f"{_percent(easy['spectral_shield']['connectivity']['mean'])}; kısıtlı koşulda "
+            f"{_percent(rival['connectivity']['mean'])} yerine "
+            f"{_percent(hard['spectral_shield']['connectivity']['mean'])} "
+            f"({rival['shield_connectivity']['wins']}–{rival['shield_connectivity']['losses']} seed).",
+            "tradeoff",
+        ),
+    )
+
 
 @dataclass(frozen=True)
 class HomeSnapshot:
@@ -26,102 +120,111 @@ def get_home_snapshot(session_state: Mapping[str, Any]) -> HomeSnapshot:
         step=str(frame.step) if frame is not None else "—",
         infected=str(metrics.get("infected_count", "—")),
         connectivity=f"%{float(connectivity) * 100:.1f}" if connectivity is not None else "—",
-        defense=config.defense_strategy.value.upper() if config is not None else "GTAD",
+        defense=config.defense_strategy.value.upper()
+        if config is not None
+        else SHOWCASE_CONFIG.defense_strategy.value.upper(),
     )
+
+
+def showcase_config() -> SimulationConfig:
+    """The landing animation runs the same scenario the simulation page opens with."""
+    return SHOWCASE_CONFIG
 
 
 def render_overview_page() -> None:
     import streamlit as st
 
-    snapshot = get_home_snapshot(st.session_state)
-    st.markdown(
-        f"""
-        <section class="sg-hero">
-            <div class="sg-hero-copy">
-                <div class="sg-hero-kicker"><span></span> OTONOM SÜRÜ SAVUNMA ARAŞTIRMA PLATFORMU</div>
-                <h2>Dinamik İHA ağlarını<br><em>saldırıya karşı dayanıklı</em> tasarla.</h2>
-                <p>Saldırı yayılımını modelle, adaptif topoloji savunmalarını çalıştır ve bilimsel sonuçları aynı tekrarlanabilir deney ortamında karşılaştır.</p>
+    from ..performance import cached_simulation
+    from ..player import render_swarm_player
+
+    hero_text, hero_visual = st.columns([1, 1.15], vertical_alignment="center", gap="large")
+    with hero_text:
+        st.markdown(
+            """
+            <section class="sg-landing">
+                <span class="sg-kicker">◈ SWARMGUARD · TÜBİTAK 2204 MATEMATİK</span>
+                <h1>Dinamik İHA ağlarını <em>spektral teoriyle</em> savun.</h1>
+                <p>Hareket eden bir İHA sürüsünde siber saldırının nasıl yayıldığını modelliyor,
+                yayılımın büyüklüğünü komşuluk matrisinin en büyük özdeğeriyle sınırlıyor ve bu
+                teoremden türetilen savunmayı simülasyonla sınıyoruz.</p>
+                <div class="sg-equation">σ(t) = 1 − γ + β · λ₁(A(t))
+                    <small>Projenin anahtar denklemi: geometrik ortalaması 1'in altındaysa salgın söner.</small>
+                </div>
                 <div class="sg-hero-actions">
                     <a class="sg-button sg-button-primary" href="simulation" target="_self">Simülasyonu aç <span>→</span></a>
-                    <a class="sg-button sg-button-secondary" href="methodology" target="_self">Metodolojiyi incele</a>
+                    <a class="sg-button sg-button-secondary" href="theory" target="_self">Teoremleri incele</a>
+                    <a class="sg-button sg-button-secondary" href="experiments" target="_self">Deney çalıştır</a>
                 </div>
-                <div class="sg-hero-proof">
-                    <div><strong>04</strong><span>Savunma yaklaşımı</span></div>
-                    <div><strong>04</strong><span>Bilimsel ağ metriği</span></div>
-                    <div><strong>100%</strong><span>Seed tekrarlanabilirliği</span></div>
-                </div>
-            </div>
-            <div class="sg-hero-visual" aria-label="Sürü ağı görselleştirmesi">
-                <div class="sg-radar-ring sg-ring-one"></div>
-                <div class="sg-radar-ring sg-ring-two"></div>
-                <div class="sg-radar-ring sg-ring-three"></div>
-                <div class="sg-network-line sg-line-one"></div>
-                <div class="sg-network-line sg-line-two"></div>
-                <div class="sg-network-line sg-line-three"></div>
-                <span class="sg-network-node sg-node-one"></span>
-                <span class="sg-network-node sg-node-two"></span>
-                <span class="sg-network-node sg-node-three"></span>
-                <span class="sg-network-node sg-node-four"></span>
-                <span class="sg-network-node sg-node-five"></span>
-                <div class="sg-radar-core">◈</div>
-                <div class="sg-visual-status"><span class="sg-status-dot sg-status-online"></span>{snapshot.status}</div>
-            </div>
-        </section>
+            </section>
+            """,
+            unsafe_allow_html=True,
+        )
+    with hero_visual:
+        config = showcase_config()
+        render_swarm_player(
+            st,
+            cached_simulation(config),
+            config,
+            height=460,
+            compact=True,
+            autoplay=True,
+            view="3d",
+        )
 
-        <section class="sg-kpi-grid">
-            <article><span>DOĞRULAMA</span><strong>111</strong><small>otomatik test</small></article>
-            <article><span>SİMÜLASYON</span><strong>SIS</strong><small>senkron yayılım</small></article>
-            <article><span>SAVUNMA</span><strong>{snapshot.defense}</strong><small>aktif yaklaşım</small></article>
-            <article><span>YAYIN</span><strong>READY</strong><small>Streamlit Cloud</small></article>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("#### Matematiksel omurga")
+    for column, (label, title, formula, caption) in zip(st.columns(4), THEOREM_CARDS, strict=True):
+        with column.container(border=True):
+            st.markdown(f'<span class="sg-card-title">{label}</span>', unsafe_allow_html=True)
+            st.markdown(f"**{title}**")
+            st.latex(formula)
+            st.caption(caption)
 
-    st.markdown(
-        """
-        <div class="sg-section-heading">
-            <div><span>UÇTAN UCA İŞ AKIŞI</span><h3>Bir senaryodan bilimsel sonuca.</h3></div>
-            <p>Parametreleri tanımla, dinamik ağı çalıştır ve savunma etkisini aynı deney tasarımında ölç.</p>
-        </div>
-        <section class="sg-process-grid">
-            <article><b>01</b><div class="sg-process-icon">⊕</div><h4>Senaryoyu kur</h4><p>Sürü boyutu, hareket, haberleşme menzili, saldırı ve savunma parametrelerini belirle.</p></article>
-            <article><b>02</b><div class="sg-process-icon">◎</div><h4>Ağı izle</h4><p>Enfeksiyon yayılımını, topoloji müdahalelerini ve kritik olayları zaman çizelgesinde takip et.</p></article>
-            <article><b>03</b><div class="sg-process-icon">∿</div><h4>Sonucu kanıtla</h4><p>Monte Carlo koşuları, güven aralıkları ve eşleştirilmiş seed analiziyle yöntemleri karşılaştır.</p></article>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
+    _render_findings(st)
 
-    st.markdown(
-        """
-        <div class="sg-section-heading sg-section-spaced">
-            <div><span>PLATFORM MODÜLLERİ</span><h3>Araştırmanın her aşaması tek yerde.</h3></div>
-        </div>
-        <section class="sg-module-grid">
-            <a href="simulation" target="_self"><span class="sg-module-index">01</span><div class="sg-module-icon">◉</div><h4>Simülasyon Laboratuvarı</h4><p>Canlı ağ, senaryo ayarları, replay ve olay analizi.</p><b>Aç →</b></a>
-            <a href="experiments" target="_self"><span class="sg-module-index">02</span><div class="sg-module-icon">Δ</div><h4>Deney Merkezi</h4><p>Monte Carlo, ablation ve savunma karşılaştırmaları.</p><b>Aç →</b></a>
-            <a href="methodology" target="_self"><span class="sg-module-index">03</span><div class="sg-module-icon">λ</div><h4>Bilimsel Metodoloji</h4><p>Modeller, denklemler, metrikler ve deney sözleşmesi.</p><b>Aç →</b></a>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
+    snapshot = get_home_snapshot(st.session_state)
+    st.markdown("#### Oturum durumu")
+    status = st.columns(4)
+    status[0].metric("Durum", snapshot.status.title())
+    status[1].metric("Son adım", snapshot.step)
+    status[2].metric("Enfekte İHA", snapshot.infected)
+    status[3].metric("En büyük bileşen", snapshot.connectivity)
 
+
+def _render_findings(st) -> None:
+    from ...findings import load_findings
+    from ..charts import render_chart
+    from ..components import findings_charts
+
+    findings = load_findings()
+    figures = {
+        "collapse": findings_charts.threshold_collapse_figure,
+        "ordering": findings_charts.ordering_figure,
+        "tradeoff": findings_charts.tradeoff_figure,
+    }
+    first, last = findings["seeds"]
     st.markdown(
         f"""
-        <section class="sg-run-banner">
-            <div>
-                <span>OPERASYON ÖZETİ</span>
-                <h3>{snapshot.status.title()}</h3>
-                <p>Demo senaryosu seed 2025 ve GTAD savunmasıyla tek tıkla çalıştırılmaya hazır.</p>
-            </div>
-            <div class="sg-run-stats">
-                <div><span>SON ADIM</span><strong>{snapshot.step}</strong></div>
-                <div><span>ENFEKTE</span><strong>{snapshot.infected}</strong></div>
-                <div><span>GCC</span><strong>{snapshot.connectivity}</strong></div>
-            </div>
-            <a class="sg-button sg-button-primary" href="simulation" target="_self">Laboratuvara git <span>→</span></a>
-        </section>
+        <div class="sg-findings-head">
+            <span class="sg-th-kicker">DENEY BULGULARI</span>
+            <div class="sg-th-title">Teoremler ne öngördü, simülasyon ne gösterdi?</div>
+            <p>Seed {first}–{last}, eşleştirilmiş koşular. Bütün sayılar
+            <code>python -m swarmguard.findings</code> komutuyla yeniden üretilir.</p>
+        </div>
         """,
         unsafe_allow_html=True,
     )
+    for finding in build_findings(findings):
+        with st.container(border=True):
+            # Text always comes first, so a phone shows the claim before its chart.
+            text, chart = st.columns([1, 1.5], vertical_alignment="center", gap="large")
+            text.markdown(
+                f"""
+                <div class="sg-finding">
+                    <span class="sg-card-title">{finding.kicker}</span>
+                    <h3>{finding.headline}</h3>
+                    <p>{finding.body}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            render_chart(chart, figures[finding.figure](findings), key=f"finding-{finding.figure}")

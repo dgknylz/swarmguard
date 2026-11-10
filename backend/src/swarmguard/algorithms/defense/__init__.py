@@ -6,7 +6,10 @@ from .base import (
     DefenseObservation,
     DefenseReport,
 )
+from .random_addition import RandomAdditionAlgorithm
+from .random_quarantine import RandomQuarantineAlgorithm
 from .registry import build_defense
+from .spectral_shield import SpectralShieldAlgorithm
 
 __all__ = [
     "DefenseAction",
@@ -15,5 +18,8 @@ __all__ = [
     "DefenseDecision",
     "DefenseObservation",
     "DefenseReport",
+    "RandomAdditionAlgorithm",
+    "RandomQuarantineAlgorithm",
+    "SpectralShieldAlgorithm",
     "build_defense",
 ]

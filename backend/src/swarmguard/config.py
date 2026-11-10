@@ -13,6 +13,9 @@ class DefenseStrategy(str, Enum):
     RANDOM_REWIRING = "random_rewiring"
     CENTRALITY_QUARANTINE = "centrality_quarantine"
     GTAD_RISK = "gtad_risk"
+    SPECTRAL_SHIELD = "spectral_shield"
+    RANDOM_ADDITION = "random_addition"
+    RANDOM_QUARANTINE = "random_quarantine"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +35,12 @@ class SimulationConfig:
     defense_budget: int = 2
     defense_range_multiplier: float = 1.5
     defense_max_degree: int = 8
+    # Probability that the defender detects an infected UAV in a given step; 1.0 is
+    # the oracle assumption of the original experiments.
+    detection_probability: float = 1.0
+    # Number of steps a defense action stays in force; 1 reproduces the original
+    # experiments, where every action expires when the graph is rebuilt.
+    defense_memory: int = 1
 
     def __post_init__(self) -> None:
         if self.node_count < 2:
@@ -54,3 +63,7 @@ class SimulationConfig:
             raise ValueError("defense_range_multiplier en az 1 olmalıdır")
         if self.defense_max_degree < 1:
             raise ValueError("defense_max_degree en az 1 olmalıdır")
+        if not 0 < self.detection_probability <= 1:
+            raise ValueError("detection_probability (0, 1] aralığında olmalıdır")
+        if self.defense_memory < 1:
+            raise ValueError("defense_memory en az 1 olmalıdır")

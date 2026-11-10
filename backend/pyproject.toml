@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swarmguard"
-version = "0.1.0"
+version = "2.0.0"
 description = "Dynamic UAV cyber-resilience simulation core"
 requires-python = ">=3.10,<3.14"
 dependencies = [
@@ -33,6 +33,9 @@ dashboard = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"swarmguard.dashboard" = ["assets/*", "assets/controls/*"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

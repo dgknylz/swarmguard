@@ -25,6 +25,8 @@ class SimulationCreateRequest(BaseModel):
     defense_budget: int = Field(default=2, ge=0, le=100)
     defense_range_multiplier: float = Field(default=1.5, ge=1, le=5)
     defense_max_degree: int = Field(default=8, ge=1, le=499)
+    detection_probability: float = Field(default=1.0, gt=0, le=1)
+    defense_memory: int = Field(default=1, ge=1, le=1_000)
     step_interval_ms: int = Field(default=50, ge=0, le=2_000)
 
     @model_validator(mode="after")
@@ -50,6 +52,8 @@ class SimulationCreateRequest(BaseModel):
             defense_budget=self.defense_budget,
             defense_range_multiplier=self.defense_range_multiplier,
             defense_max_degree=self.defense_max_degree,
+            detection_probability=self.detection_probability,
+            defense_memory=self.defense_memory,
         )
 
 

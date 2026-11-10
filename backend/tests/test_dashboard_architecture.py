@@ -9,11 +9,19 @@ from swarmguard.dashboard.components.shell import PAGE_DESCRIPTIONS, get_shell_c
 from swarmguard.dashboard.navigation import PAGE_SPECS, build_navigation
 from swarmguard.dashboard.pages.overview import get_home_snapshot
 from swarmguard.dashboard.state import get_or_create
-from swarmguard.presets import DEMO_CONFIG, SCENARIO_PRESETS, get_scenario_preset
+from swarmguard.engine import SimulationEngine
+from swarmguard.presets import (
+    DEMO_CONFIG,
+    SCENARIO_PRESETS,
+    SHOWCASE_CONFIG,
+    get_scenario_preset,
+)
+from swarmguard.spectral import spectral_radius
+from swarmguard.theory import adjacency_sequence, extinction_threshold
 
 
 def test_page_registry_has_unique_routes_and_one_default() -> None:
-    assert len(PAGE_SPECS) == 6
+    assert len(PAGE_SPECS) == 7
     assert len({spec.path for spec in PAGE_SPECS}) == len(PAGE_SPECS)
     assert sum(spec.default for spec in PAGE_SPECS) == 1
     assert {spec.section for spec in PAGE_SPECS} == {"Platform", "Araştırma"}
@@ -114,16 +122,33 @@ def test_scenario_summary_estimates_load_and_flags_risky_inputs() -> None:
     assert len(risky.warnings) == 4
 
 
-def test_scenario_library_has_seven_valid_unique_profiles() -> None:
-    assert len(SCENARIO_PRESETS) == 7
+def test_scenario_library_has_ten_valid_unique_profiles() -> None:
+    assert len(SCENARIO_PRESETS) == 10
     assert len({preset.slug for preset in SCENARIO_PRESETS}) == len(SCENARIO_PRESETS)
     assert all(
         preset.title and preset.description and preset.category for preset in SCENARIO_PRESETS
     )
     assert get_scenario_preset("gtad-demo").config == DEMO_CONFIG
+    assert SCENARIO_PRESETS[0].config == SHOWCASE_CONFIG
+    assert SHOWCASE_CONFIG.defense_strategy is DefenseStrategy.SPECTRAL_SHIELD
 
     with pytest.raises(ValueError, match="Bilinmeyen senaryo profili"):
         get_scenario_preset("missing")
+
+
+def test_threshold_presets_sit_on_both_sides_of_the_extinction_threshold() -> None:
+    below = get_scenario_preset("below-threshold").config
+    above = get_scenario_preset("above-threshold").config
+    radii = [
+        spectral_radius(adjacency)
+        for adjacency in adjacency_sequence(SimulationEngine(below).run())
+    ]
+    threshold = extinction_threshold(radii, below.gamma)
+
+    assert replace(above, beta=below.beta) == below
+    assert below.defense_strategy is DefenseStrategy.NONE
+    assert below.beta < threshold < above.beta
+    assert threshold == pytest.approx(0.0343, abs=5e-4)
 
 
 def test_baseline_preset_is_paired_with_gtad_demo() -> None:

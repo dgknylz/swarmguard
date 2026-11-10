@@ -32,13 +32,18 @@ def move_with_reflection(
     next_velocities = velocities.copy()
 
     for axis, upper_bound in ((0, width), (1, height)):
-        below = next_positions[:, axis] < 0
-        next_positions[below, axis] *= -1
-        next_velocities[below, axis] *= -1
+        # A step longer than the area bounces more than once; repeating the specular
+        # fold keeps every UAV inside and the uniform distribution invariant.
+        while True:
+            below = next_positions[:, axis] < 0
+            next_positions[below, axis] *= -1
+            next_velocities[below, axis] *= -1
 
-        above = next_positions[:, axis] > upper_bound
-        next_positions[above, axis] = 2 * upper_bound - next_positions[above, axis]
-        next_velocities[above, axis] *= -1
+            above = next_positions[:, axis] > upper_bound
+            next_positions[above, axis] = 2 * upper_bound - next_positions[above, axis]
+            next_velocities[above, axis] *= -1
+            if not np.any(next_positions[:, axis] < 0):
+                break
 
     return next_positions, next_velocities
 

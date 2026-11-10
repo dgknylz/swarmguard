@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="SwarmGuard API",
-        version="0.3.0",
+        version="2.0.0",
         description="Dynamic UAV cyber-resilience simulation API",
         lifespan=lifespan,
     )

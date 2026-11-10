@@ -5,7 +5,9 @@ import networkx as nx
 from .base import DefenseContext, DefenseObservation
 
 
-def build_observation(context: DefenseContext, *, include_risk: bool = False) -> DefenseObservation:
+def build_observation(
+    context: DefenseContext, *, include_risk: bool = False, include_betweenness: bool = True
+) -> DefenseObservation:
     graph = context.graph
     nodes = tuple(sorted(graph.nodes))
     infected = tuple(sorted(context.infected))
@@ -13,7 +15,7 @@ def build_observation(context: DefenseContext, *, include_risk: bool = False) ->
     degrees = dict(graph.degree)
     betweenness = (
         nx.betweenness_centrality(graph, normalized=True)
-        if graph.number_of_edges()
+        if graph.number_of_edges() and (include_betweenness or include_risk)
         else dict.fromkeys(nodes, 0.0)
     )
 
@@ -51,4 +53,5 @@ def build_observation(context: DefenseContext, *, include_risk: bool = False) ->
         degrees=tuple(sorted(degrees.items())),
         betweenness=tuple(sorted(betweenness.items())),
         risk_scores=risk_scores,
+        quarantined=tuple(sorted(context.quarantined)),
     )
