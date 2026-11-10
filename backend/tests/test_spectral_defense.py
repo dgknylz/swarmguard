@@ -7,6 +7,7 @@ import pytest
 from swarmguard.algorithms.defense import (
     DefenseContext,
     RandomAdditionAlgorithm,
+    RandomQuarantineAlgorithm,
     SpectralShieldAlgorithm,
     build_defense,
 )
@@ -76,6 +77,31 @@ def test_random_addition_respects_budget_range_and_degree() -> None:
     assert len(report.applied_actions) == 3
     assert all(abs(action.source - action.target) <= 2 for action in report.applied_actions)
     assert max(dict(graph.degree).values()) == 1
+
+
+def test_random_quarantine_differs_from_the_shield_only_in_ordering() -> None:
+    graph = nx.star_graph(6)
+    graph.add_edges_from([(6, 7), (5, 8)])
+    positions = tuple((float(node), 0.0) for node in range(9))
+    infected = {0, 7, 8}
+    picks = set()
+    for seed in range(12):
+        trial = graph.copy()
+        report = RandomQuarantineAlgorithm(seed, budget=1).execute(
+            context(trial, infected, positions)
+        )
+        (action,) = report.applied_actions
+        assert action.action_type == "quarantine_node" and action.source in infected
+        assert trial.degree(action.source) == 0
+        picks.add(action.source)
+    assert picks == infected
+
+    # With enough budget for every known infected UAV the order cannot matter.
+    shield, control = graph.copy(), graph.copy()
+    first = SpectralShieldAlgorithm(budget=5).execute(context(shield, infected, positions))
+    second = RandomQuarantineAlgorithm(3, budget=5).execute(context(control, infected, positions))
+    assert set(shield.edges) == set(control.edges)
+    assert len(first.applied_actions) == len(second.applied_actions)
 
 
 def test_registry_builds_every_strategy() -> None:

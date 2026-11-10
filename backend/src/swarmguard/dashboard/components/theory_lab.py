@@ -9,6 +9,14 @@ from math import hypot, pi
 import numpy as np
 
 from ...config import DefenseStrategy, SimulationConfig
+from ...findings import (
+    ENDEMIC_LEVEL,
+    SWEEP_HORIZON,
+    SWEEP_MULTIPLIERS,
+    load_findings,
+    sweep_key,
+    threshold_sweep,
+)
 from ...spectral import adjacency_from_edges
 from ...theory import (
     adjacency_sequence,
@@ -27,6 +35,7 @@ from ...theory import (
 )
 from ..charts import GRID, PLOT_LAYOUT
 from ..performance import cached_simulation
+from .findings_charts import scenario_threshold_figure, tightness_figure
 
 RED, MINT, CYAN, AMBER, VIOLET, MUTED = (
     "#fb7185",
@@ -96,6 +105,17 @@ def compute_theory(config: SimulationConfig) -> TheoryInputs:
         lower_new=np.maximum(upper - base.beta**2 * run.pair_term, 0).mean(axis=0),
         replicates=replicates,
     )
+
+
+@lru_cache(maxsize=8)
+def compute_threshold_sweep(config: SimulationConfig) -> dict[str, object]:
+    """β sweep around β* for one scenario: shipped for the presets, computed otherwise."""
+    key = list(sweep_key(config))
+    for item in load_findings()["thresholds"]:
+        if item["key"] == key:
+            return item
+    replicates = int(min(200, max(40, 3_200 // config.node_count)))
+    return threshold_sweep(config, replicates=replicates)
 
 
 def _layout(figure, height: int = 360, **extra):
@@ -310,7 +330,10 @@ def _render_theorem_2(st, inputs: TheoryInputs) -> None:
    çarpımsal alt-sınırlı olduğu için $\lVert\prod M(s)\rVert_2\le\prod\sigma(s)$. $\blacksquare$
 
 Sabit bir $A$ için $\sigma<1 \iff \beta\lambda_1<\gamma$: klasik epidemik eşik
-(Wang–Chakrabarti–Faloutsos) zamanla değişen İHA ağlarına genellenmiş olur.
+(Wang ve ark., 2003). Zamanla değişen ağlarda eşiği çarpım matrisinin özdeğeriyle veren sonuç
+Prakash ve ark. (2010) tarafından verilmiştir; buradaki biçim daha kabadır ama her karenin
+$\lambda_1$ değerinden doğrudan hesaplanır ve sonlu zaman için açık bir sayı verir
+(**Kaynaklar** sekmesi).
             """
         )
     steps = np.arange(len(inputs.monte_carlo))
@@ -582,6 +605,206 @@ def _render_phase_diagram(st, inputs: TheoryInputs) -> None:
     )
 
 
+def _render_threshold(st, inputs: TheoryInputs) -> None:
+    _theorem_header(
+        st,
+        "EŞİK SIKILIĞI · TEOREM 2 NE KADAR KESKİN?",
+        "Garanti β* değerinde biter; salgın bundan ne kadar sonra gerçekten başlıyor?",
+        f"β, eşiğin katları olarak taranır; savunmasız sürü her noktada {SWEEP_HORIZON} adım "
+        "boyunca yeniden simüle edilir.",
+    )
+    with st.spinner("Eşik taraması yapılıyor…"):
+        sweep = compute_threshold_sweep(inputs.config)
+    threshold, tightness = float(sweep["threshold_beta"]), sweep["tightness"]
+    ratio = inputs.config.beta / threshold if threshold else float("inf")
+    columns = st.columns(4)
+    columns[0].metric("Teorem 2 eşiği β*", f"{threshold:.4f}")
+    columns[1].metric(
+        "Gözlenen eşik",
+        f"{sweep['empirical_beta']:.4f}" if tightness else "—",
+        help=f"Uzun dönem enfekte oranının %{ENDEMIC_LEVEL * 100:.0f} düzeyini geçtiği ilk β.",
+    )
+    columns[2].metric(
+        "Sıkılık oranı",
+        f"×{tightness:.2f}" if tightness else "> ×8",
+        help="Gözlenen eşik / β*. 1'e ne kadar yakınsa Teorem 2 o kadar keskin.",
+    )
+    columns[3].metric(
+        "Senaryonun konumu",
+        f"×{ratio:.1f}",
+        "eşik altı" if ratio < 1 else "eşik üstü",
+        delta_color="normal" if ratio < 1 else "inverse",
+    )
+    left, right = st.columns(2)
+    left.plotly_chart(
+        scenario_threshold_figure(sweep, SWEEP_MULTIPLIERS, inputs.config.beta, ENDEMIC_LEVEL),
+        width="stretch",
+    )
+    findings = load_findings()
+    right.plotly_chart(tightness_figure(findings), width="stretch")
+    onsets = [float(item["tightness"]) for item in findings["thresholds"] if item["tightness"]]
+    below = max(float(item["level_below_threshold"]) for item in findings["thresholds"])
+    st.caption(
+        f"Solda aktif senaryo: {sweep['replicates']} koşu/nokta, {SWEEP_HORIZON} adımın son üçte "
+        f"birindeki ortalama enfekte oranı; noktalı çizgi %{ENDEMIC_LEVEL * 100:.0f} düzeyi. "
+        f"Buradaki β* {SWEEP_HORIZON} adımlık hareketten hesaplandığı için üstteki değerden biraz "
+        f"farklı olabilir. Sağda yedi hazır senaryo: gözlenen eşik β*'ın ×{min(onsets):.2f}–"
+        f"×{max(onsets):.2f} katında ve sürü yoğunlaştıkça (λ₁ büyüdükçe) 1'e yaklaşıyor. Eşiğin "
+        f"altındaki en yüksek uzun dönem düzey %{below * 100:.1f}: garanti hiçbir senaryoda "
+        "bozulmuyor. Aradaki boşluk ispatın bedelidir (birleşim sınırı ve Cauchy–Schwarz) ve "
+        "küçük sürülerde salgının rastlantıyla sönmesinden büyür."
+    )
+    with st.expander("Senaryo bazında eşik tablosu"):
+        st.dataframe(
+            [
+                {
+                    "Senaryo": item["title"],
+                    "n": item["node_count"],
+                    "γ": item["gamma"],
+                    "ortalama λ₁": item["mean_spectral_radius"],
+                    "β* (Teorem 2)": item["threshold_beta"],
+                    "gözlenen eşik": item["empirical_beta"],
+                    "oran": item["tightness"],
+                }
+                for item in findings["thresholds"]
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+
+
+REFERENCES = (
+    (
+        "Teorem 1",
+        (
+            "B. Ghosh (1951). *Random distances within a rectangle and between two rectangles.* "
+            "Bull. Calcutta Math. Soc. 43, 17–24."
+        ),
+        (
+            "Dikdörtgende iki rastgele nokta arasındaki mesafenin dağılımı. Teorem 1 bu klasik "
+            "sonucun haberleşme menziline uygulanmış biçimidir."
+        ),
+    ),
+    (
+        "Lemma 1.1",
+        (
+            "P. Nain, D. Towsley, B. Liu, Z. Liu (2005). *Properties of random direction models.* "
+            "IEEE INFOCOM, 1897–1907."
+        ),
+        "Yansımalı rastgele yön hareketinde düzgün dağılımın korunması.",
+    ),
+    (
+        "Teorem 2 · statik eşik",
+        (
+            "Y. Wang, D. Chakrabarti, C. Wang, C. Faloutsos (2003). *Epidemic spreading in real "
+            "networks: an eigenvalue viewpoint.* SRDS, 25–34."
+        ),
+        "Sabit ağda epidemik eşik 1/λ₁(A).",
+    ),
+    (
+        "Ortalama alan",
+        (
+            "P. Van Mieghem, J. Omic, R. Kooij (2009). *Virus spread in networks.* IEEE/ACM "
+            "Trans. Networking 17(1), 1–14."
+        ),
+        "Grafiklerdeki NIMFA eğrisinin kaynağı (N-intertwined ortalama alan yaklaşımı).",
+    ),
+    (
+        "Teorem 2 · değişen ağ",
+        (
+            "B. A. Prakash, H. Tong, N. Valler, M. Faloutsos, C. Faloutsos (2010). *Virus "
+            "propagation on time-varying networks: theory and immunization algorithms.* "
+            "ECML PKDD, LNCS 6323, 99–114."
+        ),
+        (
+            "Zamanla değişen ağlarda eşik, sistem matrislerinin çarpımının en büyük özdeğeriyle "
+            "verilir."
+        ),
+    ),
+    (
+        "Lemma 4 · λ₁",
+        (
+            "H. Tong ve ark. (2010). *On the vulnerability of large graphs.* ICDM; "
+            "H. Tong ve ark. (2012). *Gelling, and melting, large graphs by edge manipulation.* "
+            "CIKM, 245–254."
+        ),
+        "λ₁'i düşürmek için düğüm ve kenar seçiminde özvektör puanları (uᵢ², uᵢuⱼ).",
+    ),
+    (
+        "Lemma 4 · λ₂",
+        "A. Ghosh, S. Boyd (2006). *Growing well-connected graphs.* IEEE CDC, 6605–6611.",
+        (
+            "Cebirsel bağlantısallığı artırmak için Fiedler vektörüne dayalı kenar ekleme, "
+            "(vᵢ − vⱼ)² puanı."
+        ),
+    ),
+)
+
+CONTRIBUTIONS = (
+    (
+        "Sonlu zamanlı, açık sabitli sınır",
+        (
+            "Teorem 2 yalnızca bir eşik değil, her t için hesaplanabilen bir sayı verir: "
+            "E[I(t)] ≤ √(nI₀)·Πσ(s). Periyodiklik varsayımı yoktur; uyarlamasız her ağ dizisinde "
+            "geçerlidir ve ispatı dört adımda kendi içinde tamamdır."
+        ),
+    ),
+    (
+        "Hareket modeliyle birleştirme ve sıkılık ölçümü",
+        (
+            "Teorem 1 ve Lemma 1.1 sürünün her adımdaki beklenen derecesini kesin verir. "
+            "Teorem 2'nin eşiği yedi farklı sürüde uzun ufuklu simülasyonla karşılaştırılmış; "
+            "gözlenen eşiğin β*'ın kaç katında kaldığı ve yoğunlukla nasıl değiştiği ölçülmüştür "
+            "(Eşik sıkılığı sekmesi)."
+        ),
+    ),
+    (
+        "Spektral Kalkan",
+        (
+            "Perron ağırlıklı karantina ile Fiedler kazançlı onarım tek bir adım bütçesinde, "
+            "kusurlu tespit ve kalıcı müdahale altında birleştirilmiştir."
+        ),
+    ),
+    (
+        "Adil kontroller ve açık sınırlar",
+        (
+            "Her bileşenin katkısı kendi kontrol grubuyla ayrıştırılır (rastgele ekleme, rastgele "
+            "karantina; eşleştirilmiş seed, Holm düzeltmesi). Olumsuz sonuçlar da raporlanır: bütçe "
+            "bolken sıralama fark yaratmaz, GTAD yayılımı düşürmez, Teorem 2 uyarlamalı savunmada "
+            "geçerli değildir."
+        ),
+    ),
+)
+
+
+def _render_references(st) -> None:
+    _theorem_header(
+        st,
+        "KAYNAKLAR VE ÖZGÜNLÜK",
+        "Hangi sonuç literatürden, hangisi bu projeden?",
+        "Teoremlerin dayandığı bilinen sonuçlar ve projenin bunların üzerine eklediği katkı.",
+    )
+    known, new = st.columns([1.15, 1], gap="large")
+    with known:
+        st.markdown("##### Dayandığımız sonuçlar")
+        for label, citation, role in REFERENCES:
+            with st.container(border=True):
+                st.markdown(
+                    f'<span class="sg-card-title">{label.upper()}</span>', unsafe_allow_html=True
+                )
+                st.markdown(citation)
+                st.caption(role)
+    with new:
+        st.markdown("##### Bu projenin katkısı")
+        for index, (title, body) in enumerate(CONTRIBUTIONS, start=1):
+            with st.container(border=True):
+                st.markdown(
+                    f'<span class="sg-card-title">KATKI {index}</span>', unsafe_allow_html=True
+                )
+                st.markdown(f"**{title}**")
+                st.caption(body)
+
+
 def render_theory_lab(st, config: SimulationConfig) -> None:
     with st.spinner("Teorem hesapları yapılıyor…"):
         inputs = compute_theory(config)
@@ -592,7 +815,9 @@ def render_theory_lab(st, config: SimulationConfig) -> None:
             "Teorem 2 · Spektral sınır",
             "Önerme 3 · Bulaş",
             "Lemma 4 · Pertürbasyon",
+            "Eşik sıkılığı",
             "Faz diyagramı",
+            "Kaynaklar",
         ]
     )
     with sections[0]:
@@ -604,4 +829,8 @@ def render_theory_lab(st, config: SimulationConfig) -> None:
     with sections[3]:
         _render_lemma_4(st, config)
     with sections[4]:
+        _render_threshold(st, inputs)
+    with sections[5]:
         _render_phase_diagram(st, inputs)
+    with sections[6]:
+        _render_references(st)

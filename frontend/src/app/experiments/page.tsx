@@ -35,7 +35,7 @@ export default function ExperimentsPage() {
     try {
       const request = { scenario: experimentScenario, seeds };
       setResult(kind === "monte_carlo"
-        ? await apiClient.runMonteCarlo({ ...request, strategies: ["none", "random_rewiring", "centrality_quarantine", "gtad_risk", "spectral_shield", "random_addition"] })
+        ? await apiClient.runMonteCarlo({ ...request, strategies: ["none", "random_rewiring", "centrality_quarantine", "gtad_risk", "spectral_shield", "random_addition", "random_quarantine"] })
         : await apiClient.runGtadAblation(request));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Deney çalıştırılamadı");

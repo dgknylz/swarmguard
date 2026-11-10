@@ -80,6 +80,12 @@ DEFENSE_METHODS = (
         "GTAD ile aynı bütçe ve kısıtlarla rastgele sağlıklı bağlantı ekler.",
         "Puanlamalı yöntemlerin kazancını 'bağlantı eklemenin kendisinden' ayırır.",
     ),
+    MethodDefinition(
+        "random_quarantine",
+        "Rastgele karantina (kontrol)",
+        "Spektral Kalkan'ın aynısıdır; yalnızca izole edilecek enfekteleri rastgele sıralar.",
+        "İki yöntem arasındaki fark, Perron sıralamasının tek başına katkısını ölçer.",
+    ),
 )
 
 METRIC_DEFINITIONS = (

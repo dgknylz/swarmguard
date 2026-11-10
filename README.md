@@ -19,36 +19,97 @@ verilir ve aktif senaryonun verisiyle sayısal olarak doğrulanır:
 
 Bu sonuçlardan türetilen **Spektral Kalkan** savunması, bilinen enfekteleri
 Perron ağırlığına göre izole eder ve kalan bütçeyle ağı Fiedler kazancına göre
-onarır. `RANDOM_ADDITION` adil kontrol grubudur. Model artık kusurlu tespiti
-(`detection_probability`) ve kalıcı müdahaleyi (`defense_memory`) de
-destekler; varsayılan değerler orijinal deneyleri birebir yeniden üretir
+onarır. Her bileşenin kendi kontrol grubu vardır: `RANDOM_ADDITION` puanlamasız
+bağlantı ekler, `RANDOM_QUARANTINE` ise Spektral Kalkan'ın aynısını rastgele
+karantina sırasıyla çalıştırır. Model kusurlu tespiti (`detection_probability`)
+ve kalıcı müdahaleyi (`defense_memory`) de destekler; varsayılan değerler
+orijinal deneyleri birebir yeniden üretir
 (`test_original_report_numbers_are_reproduced`).
 
-`DEMO_CONFIG`, 30 seed, ortalama enfeksiyon oranı / ortalama en büyük bileşen:
+### Bulgular
 
-| Yöntem | Kusursuz tespit | Gerçekçi (q = 0.5, kalıcılık 3, I₀ = 4) |
+Aşağıdaki bütün sayılar `python -m swarmguard.findings` komutuyla yeniden
+üretilir (seed 1–30, eşleştirilmiş koşular) ve uygulamanın **Genel Bakış** ve
+**Teori → Eşik sıkılığı** bölümlerinde grafik olarak gösterilir.
+
+**1. Teorem 2'nin eşiği doğru yerde.** Savunmasız sürüde β, teorik eşik β*'ın
+katları olarak tarandı (400 adım, nokta başına
+200 koşu; "gözlenen eşik" uzun dönem enfekte oranının
+%5 düzeyini geçtiği ilk β). Garanti hiçbir
+senaryoda bozulmuyor; salgın β*'ın ×1.4–×3.7 katında
+başlıyor ve sürü yoğunlaştıkça fark kapanıyor.
+
+| Senaryo | n | ort. λ₁ | β* (Teorem 2) | Gözlenen eşik | Oran |
+| --- | --- | --- | --- | --- | --- |
+| Spektral Kalkan Demo | 24 | 5.84 | 0.0154 | 0.0367 | ×2.38 |
+| Eşik Altı · Garantili Sönüm | 24 | 5.84 | 0.0344 | 0.0972 | ×2.83 |
+| Hızlı Salgın | 36 | 7.97 | 0.0038 | 0.0058 | ×1.54 |
+| Kırılgan Haberleşme | 28 | 3.32 | 0.0181 | 0.0664 | ×3.67 |
+| Yoğun Sürü | 80 | 23.87 | 0.0042 | 0.0059 | ×1.41 |
+| Kritik Düğüm Karantinası | 40 | 9.84 | 0.0071 | 0.0142 | ×2.00 |
+| Hareketlilik Stresi | 45 | 6.78 | 0.0118 | 0.0258 | ×2.18 |
+
+**2. Perron sıralaması bütçe daraldığında fark yaratıyor.** Spektral Kalkan ile
+rastgele sıralı kontrolünün ortalama enfeksiyon oranı (demo sürüsü, 30 seed):
+
+| Koşul | Perron sırası | Rastgele sıra | Fark | p (eşl. t) | Kazanç–kayıp–berabere |
+| --- | --- | --- | --- | --- | --- |
+| Bol bütçe · kusursuz tespit | 0.016 | 0.016 | +0.000 | 1.000 | 0–0–30 |
+| Kusurlu tespit (q = 0.5) | 0.131 | 0.196 | -0.064 | 0.101 | 13–7–10 |
+| Kısıtlı bütçe (B = 1) | 0.709 | 0.743 | -0.034 | 0.028 | 23–7–0 |
+| Kısıtlı bütçe + kusurlu tespit | 0.555 | 0.681 | -0.126 | 0.004 | 22–8–0 |
+
+Bütçe bütün bilinen enfektelere yettiğinde sıralamanın önemi yoktur; adım başına
+tek müdahale ve %50 tespit altında Perron sırası 22 seed'de öndedir.
+
+**3. Güvenlik ve bağlantısallık birlikte.** Ortalama enfeksiyon oranı / ortalama
+en büyük bileşen (demo sürüsü, 30 seed):
+
+| Yöntem | Kusursuz tespit (B = 2, I₀ = 2) | Kısıtlı (B = 1, q = 0.5, kalıcılık 3, I₀ = 6) |
 | --- | --- | --- |
-| Savunmasız | 0.720 / 0.900 | 0.741 / 0.900 |
-| GTAD | 0.720 / 0.933 | 0.778 / 0.949 |
-| Rastgele ekleme (kontrol) | 0.720 / 0.926 | 0.774 / 0.942 |
-| Merkeziyet karantinası | 0.016 / 0.860 | 0.113 / 0.763 |
-| **Spektral Kalkan** | **0.016 / 0.942** | **0.131 / 0.872** |
+| Savunmasız | 0.720 / 0.900 | 0.762 / 0.900 |
+| Rastgele yeniden bağlantı | 0.707 / 0.913 | 0.762 / 0.900 |
+| GTAD Risk | 0.720 / 0.933 | 0.783 / 0.946 |
+| Rastgele ekleme (kontrol) | 0.720 / 0.926 | 0.784 / 0.934 |
+| Merkeziyet karantinası | 0.016 / 0.860 | 0.620 / 0.610 |
+| Rastgele karantina (kontrol) | 0.016 / 0.942 | 0.681 / 0.739 |
+| **Spektral Kalkan** | **0.016 / 0.942** | **0.555 / 0.762** |
+
+Bağlantı ekleyen yöntemler (GTAD, rastgele ekleme) yayılımı düşürmez; karantina
+düşürür ama ağı parçalar. Spektral Kalkan kısıtlı koşulda en büyük bileşeni
+merkeziyet karantinasına göre 30 seed'in tamamında daha yüksek
+tutar; iki yöntemin enfeksiyon farkı ise istatistiksel olarak anlamlı değildir
+(Δ = -0.064, p = 0.053).
+
+### Sınırlar
+
+- Teorem 2 yalnızca salgından bağımsız seçilen ağ dizilerinde (savunmasız
+  hareket) geçerlidir; uyarlamalı savunmalar için bir garanti vermez.
+- Hazır senaryoların çoğunda β, β*'ın 9–95 katıdır; bu bölgede sınır bilgi
+  taşımaz. Eşiğin iki yanını görmek için **Eşik Altı** ve **Eşik Üstü**
+  senaryoları eklenmiştir.
+- Kısıtlı koşulda Spektral Kalkan salgını bitirmez, yalnızca yavaşlatır
+  (ortalama enfeksiyon 0.555).
+- Teorem 1 ve statik eşik bilinen sonuçlardır; kaynaklar ve projenin katkısı
+  **Teori → Kaynaklar** sekmesindedir.
 
 Deney ekranı her yöntem için baseline'ı geçtiği seed sayısını, Holm düzeltmeli
 eşleştirilmiş t testi p değerini, etki büyüklüğünü ve ortak rastgele sayıların
-sağladığı varyans azalmasını raporlar. Simülasyon artık tarayıcıda 60 fps
-çalışan bir canvas oynatıcısıyla izlenir (kareler arası enterpolasyon, canlı σ(t)
-göstergesi, Perron ağırlıklı İHA incelemesi). Oynatıcının **Matematik** katmanları
+sağladığı varyans azalmasını raporlar. Simülasyon tarayıcıda çalışan bir canvas
+oynatıcısıyla izlenir (kareler arası enterpolasyon, canlı σ(t) göstergesi,
+Perron ağırlıklı İHA incelemesi). Oynatıcının **Matematik** katmanları
 düğümleri Perron ağırlığına göre ısı rengiyle, kenarları λ₁'e katkılarına
 (2uᵢuⱼ) göre kalınlıkla gösterir ve Fiedler vektörüyle ağın en zayıf kesimini
 iki renkte ayırır. **3B** görünüm, `static/` klasörüne gömülü three.js ile
 internet bağlantısı olmadan da çalışır.
 
-## Şu anki durum: 47 / 47 adım tamamlandı
+## v1 altyapısı: 47 / 47 adım
 
-Son ürün kontrolü tamamlandı. Kod GitHub'daki `dgknylz/swarmguard` deposuna
-gönderildi ve uygulama Streamlit Community Cloud üzerinde canlıdır:
+v1 yol haritası tamamlandı. Kod GitHub'daki `dgknylz/swarmguard` deposundadır ve
+`main` dalı Streamlit Community Cloud üzerinde canlıdır:
 https://7dtgk27v5yinc3r2ouqkck.streamlit.app
+(v2 spektral sürüm `feature/spectral-v2` dalındadır; `main` ile birleştirilince
+canlı adrese yansır.)
 
 Bilimsel simülasyon çekirdeği şunları içerir:
 
@@ -272,7 +333,7 @@ senkron olarak hesaplanır.
 
 ## Doğrulama
 
-- Backend: 91 test
+- Backend: 134 test
 - Frontend: 20 test
 - Ruff, ESLint ve TypeScript kontrolleri
 - Next.js production build

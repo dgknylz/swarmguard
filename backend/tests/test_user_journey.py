@@ -97,7 +97,7 @@ render_experiments_page()
 
     assert not app.exception
     assert len(app.session_state["experiment_history"]) == 1
-    assert app.session_state["experiment_history"][0]["run_count"] == 10
+    assert app.session_state["experiment_history"][0]["run_count"] == 12
     assert contains_markdown(app, "DENEY TAMAMLANDI")
 
     app.segmented_control[0].set_value("comparison")

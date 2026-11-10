@@ -20,6 +20,7 @@ DEFENSE_LABELS = {
     DefenseStrategy.GTAD_RISK: "GTAD risk tabanlı",
     DefenseStrategy.SPECTRAL_SHIELD: "Spektral Kalkan",
     DefenseStrategy.RANDOM_ADDITION: "Rastgele ekleme (kontrol)",
+    DefenseStrategy.RANDOM_QUARANTINE: "Rastgele karantina (kontrol)",
 }
 
 

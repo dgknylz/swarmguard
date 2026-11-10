@@ -48,18 +48,11 @@ class SpectralShieldAlgorithm(DefenseAlgorithm):
         adjacency = adjacency_from_edges(observation.node_count, observation.edges)
         radius, perron = perron_pair(adjacency)
         degrees = dict(observation.degrees)
-        targets = sorted(
-            (node for node in observation.infected if degrees.get(node, 0) > 0),
-            key=lambda node: (-perron[node], node),
-        )[: self.budget]
+        linked = [node for node in observation.infected if degrees.get(node, 0) > 0]
+        targets = self._rank_targets(linked, perron)[: self.budget]
         actions = [
             DefenseAction(
-                "quarantine_node",
-                node,
-                reason=(
-                    f"Perron ağırlığı u²={perron[node] ** 2:.4f}; "
-                    f"λ₁ azalması ≤ {2 * radius * perron[node] ** 2:.3f}"
-                ),
+                "quarantine_node", node, reason=self._quarantine_reason(node, radius, perron)
             )
             for node in targets
         ]
@@ -90,6 +83,15 @@ class SpectralShieldAlgorithm(DefenseAlgorithm):
                 "repair_links": links,
                 "link_penalty": self.link_penalty,
             },
+        )
+
+    def _rank_targets(self, nodes: list[int], perron: np.ndarray) -> list[int]:
+        return sorted(nodes, key=lambda node: (-perron[node], node))
+
+    def _quarantine_reason(self, node: int, radius: float, perron: np.ndarray) -> str:
+        return (
+            f"Perron ağırlığı u²={perron[node] ** 2:.4f}; "
+            f"λ₁ azalması ≤ {2 * radius * perron[node] ** 2:.3f}"
         )
 
     def _repair_links(

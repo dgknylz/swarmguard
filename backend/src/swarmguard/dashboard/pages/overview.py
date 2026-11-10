@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
-from ...config import DefenseStrategy, SimulationConfig
-from ...presets import DEMO_CONFIG
+from ...config import SimulationConfig
+from ...presets import SHOWCASE_CONFIG
 
 THEOREM_CARDS = (
     (
@@ -36,6 +36,70 @@ THEOREM_CARDS = (
 
 
 @dataclass(frozen=True)
+class Finding:
+    kicker: str
+    headline: str
+    body: str
+    figure: str
+
+
+def _percent(value: float) -> str:
+    return f"%{value * 100:.1f}"
+
+
+def build_findings(findings: Mapping[str, Any]) -> tuple[Finding, ...]:
+    """Three headline sentences written from the shipped experiment data."""
+    onsets = [float(item["tightness"]) for item in findings["thresholds"] if item["tightness"]]
+    # The ordering settings run from the loosest (ample budget) to the tightest one.
+    loose, tight = findings["ordering"][0], findings["ordering"][-1]
+    tables = {
+        item["key"]: {row["method"]: row for row in item["rows"]} for item in findings["tables"]
+    }
+    easy, hard = tables["perfect"], tables["constrained"]
+    dense = min(findings["thresholds"], key=lambda item: item["tightness"] or float("inf"))
+    rival = hard["centrality_quarantine"]
+    return (
+        Finding(
+            "BULGU 1 · EŞİK DOĞRU YERDE",
+            f"Salgın, teorik eşiğin ×{min(onsets):.1f}–×{max(onsets):.1f} katında başlıyor.",
+            f"β < β* iken sönüm ispatlıdır ve {len(onsets)} farklı sürünün hiçbirinde bozulmuyor. "
+            "β eşiğin katları olarak tarandığında bütün eğriler sıfırdan eşiğin sağında ayrılıyor; "
+            f"sürü yoğunlaştıkça fark kapanıyor ({dense['node_count']} İHA'lık "
+            f"{dense['title']} senaryosunda ×{dense['tightness']:.1f}).",
+            "collapse",
+        ),
+        Finding(
+            "BULGU 2 · SIRALAMANIN DEĞERİ",
+            f"Bütçe daraldığında Perron sırası {tight['wins']}–{tight['losses']} öne geçiyor.",
+            "Kontrol grubu Spektral Kalkan'ın aynısıdır, yalnızca karantina sırası rastgeledir. "
+            + (
+                "Bütçe bolken iki yöntem aynı sonucu verir; "
+                if loose["wins"] == loose["losses"] == 0
+                else "Bütçe bolken fark küçüktür; "
+            )
+            + "adım başına tek müdahale ve %50 tespitte ortalama enfeksiyon "
+            f"{_percent(tight['control']['mean'])} yerine {_percent(tight['shield']['mean'])} olur "
+            f"(eşleştirilmiş t testi, p = {tight['p_value']:.3f}).",
+            "ordering",
+        ),
+        Finding(
+            "BULGU 3 · GÜVENLİK VE BAĞLANTI BİRLİKTE",
+            "Karantina yöntemleri içinde en bağlı ağ Spektral Kalkan'da.",
+            "Bağlantı ekleyen yöntemler (GTAD, rastgele ekleme) yayılımı düşürmüyor; karantina "
+            "düşürüyor ama ağı parçalıyor. Spektral Kalkan kalan bütçeyle ağı onarır: kusursuz "
+            f"tespitte merkeziyet karantinasıyla aynı enfeksiyonda "
+            f"({_percent(easy['spectral_shield']['infection']['mean'])}) en büyük bileşen "
+            f"{_percent(easy['centrality_quarantine']['connectivity']['mean'])} yerine "
+            f"{_percent(easy['spectral_shield']['connectivity']['mean'])}; kısıtlı koşulda "
+            f"{_percent(rival['connectivity']['mean'])} yerine "
+            f"{_percent(hard['spectral_shield']['connectivity']['mean'])} "
+            f"({rival['shield_connectivity']['wins']}–{rival['shield_connectivity']['losses']} seed).",
+            "tradeoff",
+        ),
+    )
+
+
+@dataclass(frozen=True)
 class HomeSnapshot:
     status: str
     step: str
@@ -56,13 +120,15 @@ def get_home_snapshot(session_state: Mapping[str, Any]) -> HomeSnapshot:
         step=str(frame.step) if frame is not None else "—",
         infected=str(metrics.get("infected_count", "—")),
         connectivity=f"%{float(connectivity) * 100:.1f}" if connectivity is not None else "—",
-        defense=config.defense_strategy.value.upper() if config is not None else "GTAD",
+        defense=config.defense_strategy.value.upper()
+        if config is not None
+        else SHOWCASE_CONFIG.defense_strategy.value.upper(),
     )
 
 
 def showcase_config() -> SimulationConfig:
-    """The landing animation runs the spectral defense on the demo swarm."""
-    return replace(DEMO_CONFIG, defense_strategy=DefenseStrategy.SPECTRAL_SHIELD)
+    """The landing animation runs the same scenario the simulation page opens with."""
+    return SHOWCASE_CONFIG
 
 
 def render_overview_page() -> None:
@@ -113,6 +179,8 @@ def render_overview_page() -> None:
             st.latex(formula)
             st.caption(caption)
 
+    _render_findings(st)
+
     snapshot = get_home_snapshot(st.session_state)
     st.markdown("#### Oturum durumu")
     status = st.columns(4)
@@ -120,3 +188,49 @@ def render_overview_page() -> None:
     status[1].metric("Son adım", snapshot.step)
     status[2].metric("Enfekte İHA", snapshot.infected)
     status[3].metric("En büyük bileşen", snapshot.connectivity)
+
+
+def _render_findings(st) -> None:
+    from ...findings import load_findings
+    from ..components import findings_charts
+
+    findings = load_findings()
+    figures = {
+        "collapse": findings_charts.threshold_collapse_figure,
+        "ordering": findings_charts.ordering_figure,
+        "tradeoff": findings_charts.tradeoff_figure,
+    }
+    first, last = findings["seeds"]
+    st.markdown(
+        f"""
+        <div class="sg-findings-head">
+            <span class="sg-th-kicker">DENEY BULGULARI</span>
+            <div class="sg-th-title">Teoremler ne öngördü, simülasyon ne gösterdi?</div>
+            <p>Seed {first}–{last}, eşleştirilmiş koşular. Bütün sayılar
+            <code>python -m swarmguard.findings</code> komutuyla yeniden üretilir.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    for index, finding in enumerate(build_findings(findings)):
+        with st.container(border=True):
+            if index % 2:
+                chart, text = st.columns([1.5, 1], vertical_alignment="center", gap="large")
+            else:
+                text, chart = st.columns([1, 1.5], vertical_alignment="center", gap="large")
+            text.markdown(
+                f"""
+                <div class="sg-finding">
+                    <span class="sg-card-title">{finding.kicker}</span>
+                    <h3>{finding.headline}</h3>
+                    <p>{finding.body}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            chart.plotly_chart(
+                figures[finding.figure](findings),
+                width="stretch",
+                key=f"finding-{finding.figure}",
+                config={"displayModeBar": False},
+            )

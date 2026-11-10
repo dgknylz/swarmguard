@@ -15,6 +15,7 @@ class DefenseStrategy(str, Enum):
     GTAD_RISK = "gtad_risk"
     SPECTRAL_SHIELD = "spectral_shield"
     RANDOM_ADDITION = "random_addition"
+    RANDOM_QUARANTINE = "random_quarantine"
 
 
 @dataclass(frozen=True, slots=True)

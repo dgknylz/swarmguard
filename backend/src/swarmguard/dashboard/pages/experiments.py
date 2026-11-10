@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...presets import DEMO_CONFIG
+from ...presets import SHOWCASE_CONFIG
 from ..components.comparison_panel import render_comparison_panel
 from ..components.experiment_center import render_experiment_center
 from ..components.report_center import render_report_center
@@ -9,7 +9,7 @@ from ..components.report_center import render_report_center
 def render_experiments_page() -> None:
     import streamlit as st
 
-    config = st.session_state.get("config", DEMO_CONFIG)
+    config = st.session_state.get("config", SHOWCASE_CONFIG)
     view = st.segmented_control(
         "Deney bölümü",
         options=("center", "comparison", "report"),

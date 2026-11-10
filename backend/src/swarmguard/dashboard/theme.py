@@ -592,6 +592,13 @@ REFRESH_CSS = """
     .sg-theorem-head p { margin: 0; color: #8fa6aa; }
     .sg-card-title { color: #fbbf24; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; }
     @media (max-width: 900px) { .sg-theory-hero { grid-template-columns: 1fr; } }
+    .sg-findings-head { margin: 1.6rem 0 0.6rem; }
+    .sg-findings-head p { margin: 0; color: #8fa6aa; }
+    .sg-findings-head code { color: #5eead4; background: rgba(94, 234, 212, 0.08); }
+    .sg-finding { padding: 0.4rem 0.6rem; }
+    .sg-finding h3 { margin: 0.5rem 0 0.6rem; padding: 0; color: #f1fbfa; font-size: 1.45rem;
+        line-height: 1.2; letter-spacing: -0.03em; }
+    .sg-finding p { margin: 0; color: #9db3b6; line-height: 1.65; }
 
     /* Motion: content rises in once when it mounts; reruns keep mounted elements still. */
     @keyframes sg-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }

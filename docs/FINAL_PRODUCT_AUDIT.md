@@ -2,6 +2,9 @@
 
 Tarih: 7 Ekim 2026
 
+> Bu belge v1 (47 adım) denetimidir. v2 spektral sürümün güncel bulguları, sınırları
+> ve test sayıları için `README.md` dosyasına bakın.
+
 ## Sonuç
 
 Adım 47 tamamlandı. Uygulamanın simülasyon, deney, raporlama, veri taşıma ve
